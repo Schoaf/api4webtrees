@@ -249,7 +249,7 @@ trait PlaceActions
         $families    = [];
         foreach ($facts_by_record as $facts) {
             $record = $facts[0]->record();
-            $entry  = ['name' => $this->plain($record->fullName()), 'record' => $record, 'facts' => $facts];
+            $entry  = ['name' => $this->recordName($record), 'record' => $record, 'facts' => $facts];
             if ($record instanceof Individual) {
                 $individuals[] = $entry;
             } elseif ($record instanceof Family) {
@@ -1301,7 +1301,7 @@ trait PlaceActions
                 $page   = trim(GedcomText::firstValue($sub, 3, 'PAGE'));
                 $sources[] = [
                     'xref'  => $target instanceof Source && $target->canShow() ? $target->xref() : null,
-                    'title' => $target instanceof Source ? ($target->canShow() ? $this->plain($target->fullName()) : null) : $value,
+                    'title' => $target instanceof Source ? ($target->canShow() ? $this->recordName($target) : null) : $value,
                     'page'  => $page === '' ? null : $page,
                 ];
             }
@@ -1419,7 +1419,7 @@ trait PlaceActions
             $target    = $fact->target();
             $sources[] = [
                 'xref'  => $target instanceof Source && $target->canShow() ? $target->xref() : null,
-                'title' => $target instanceof Source ? ($target->canShow() ? $this->plain($target->fullName()) : null) : $this->plain($fact->value()),
+                'title' => $target instanceof Source ? ($target->canShow() ? $this->recordName($target) : null) : $this->plain($fact->value()),
                 'page'  => $fact->attribute('PAGE') === '' ? null : $fact->attribute('PAGE'),
             ];
         }

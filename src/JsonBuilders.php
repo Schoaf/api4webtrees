@@ -77,7 +77,7 @@ trait JsonBuilders
     {
         return [
             'xref'     => $individual->xref(),
-            'name'     => $this->plain($individual->fullName()),
+            'name'     => $this->recordName($individual),
             'sex'      => $this->sexCode($individual),
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),
@@ -108,7 +108,7 @@ trait JsonBuilders
 
         $summary = [
             'xref'       => $individual->xref(),
-            'name'       => $this->plain($individual->fullName()),
+            'name'       => $this->recordName($individual),
             'sortName'   => $individual->sortName(),
             'given'      => $individual->canShowName() ? $given : '',
             'surname'    => $individual->canShowName() ? $surname : '',
@@ -209,7 +209,7 @@ trait JsonBuilders
                 $child_spouse = $child_family->spouse($child);
                 $marriages[]  = [
                     'family' => $child_family->xref(),
-                    'spouse' => $child_spouse instanceof Individual && $child_spouse->canShowName() ? $this->plain($child_spouse->fullName()) : '',
+                    'spouse' => $child_spouse instanceof Individual && $child_spouse->canShowName() ? $this->recordName($child_spouse) : '',
                     'date'   => $this->dateJson($child_family->getMarriageDate()),
                     'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
                 ];
@@ -219,7 +219,7 @@ trait JsonBuilders
 
         return [
             'xref'     => $family->xref(),
-            'name'     => $this->plain($family->fullName()),
+            'name'     => $this->recordName($family),
             'url'      => $family->url(),
             'husband'  => $husband instanceof Individual ? $this->personSummary($husband, $with_counts) : null,
             'wife'     => $wife instanceof Individual ? $this->personSummary($wife, $with_counts) : null,
@@ -410,7 +410,7 @@ trait JsonBuilders
 
         return [
             'xref'    => $match[1],
-            'name'    => $private ? null : $this->plain($individual->fullName()),
+            'name'    => $private ? null : $this->recordName($individual),
             'sex'     => $private ? null : $this->sexCode($individual),
             'rela'    => $rela,
             'role'    => $role,
@@ -508,7 +508,7 @@ trait JsonBuilders
                     $data[]  = [
                         'record'     => $record->xref(),
                         'recordType' => $record instanceof Family ? 'FAM' : 'INDI',
-                        'name'       => $this->plain($record->fullName()),
+                        'name'       => $this->recordName($record),
                         'tag'        => $this->shortTag($shown->tag()),
                         'label'      => $this->factLabel($shown),
                         'factId'     => $shown->id(),
@@ -575,7 +575,7 @@ trait JsonBuilders
 
             $data[] = [
                 'xref'    => $media->xref(),
-                'title'   => $media_file->title() !== '' ? $media_file->title() : $this->plain($media->fullName()),
+                'title'   => $media_file->title() !== '' ? $media_file->title() : $this->recordName($media),
                 'mime'    => $media_file->mimeType(),
                 'isImage' => $is_image,
                 'thumb'   => $thumb,
@@ -802,7 +802,7 @@ trait JsonBuilders
 
         return [
             'xref'         => $source->xref(),
-            'title'        => $this->plain($source->fullName()),
+            'title'        => $this->recordName($source),
             'author'       => $attr('AUTH'),
             'publication'  => $attr('PUBL'),
             'abbreviation' => $attr('ABBR'),
@@ -828,7 +828,7 @@ trait JsonBuilders
             }
             $repo = Registry::repositoryFactory()->make($m[1], $source->tree());
             if ($repo instanceof Repository && $repo->canShow()) {
-                $data[] = ['xref' => $m[1], 'name' => $this->plain($repo->fullName()), 'callNumber' => GedcomText::subrecords($sub, 2, 'CALN')[0][0] ?? ''];
+                $data[] = ['xref' => $m[1], 'name' => $this->recordName($repo), 'callNumber' => GedcomText::subrecords($sub, 2, 'CALN')[0][0] ?? ''];
             }
         }
 
@@ -892,7 +892,7 @@ trait JsonBuilders
             }
 
             $xref  = $match[1];
-            $title = $this->plain($source->fullName());
+            $title = $this->recordName($source);
         } else {
             $xref  = '';
             $title = GedcomText::withContinuations($value, $sub, $level);
@@ -964,6 +964,45 @@ trait JsonBuilders
     }
 
     /**
+     * Angezeigter Name eines Datensatzes als Text. Bei Personen kommt ein Spitzname aus "2 NICK" in Anfuehrungszeichen
+     * hinter den Vornamen ("Johannes \"Jan\" de Vries") - webtrees selbst zeigt NICK nur als eigene Zeile, viele
+     * Programme schreiben den Spitznamen aber so und nicht in den Namen. Steht schon ein Spitzname im Namen, bleibt es dabei.
+     */
+    private function recordName(GedcomRecord $record): string
+    {
+        $text = $this->plain($record->fullName());
+
+        if (!$record instanceof Individual || !$record->canShowName() || $record->getPrimaryName() !== 0) {
+            return $text;
+        }
+
+        $fact = $record->facts(['NAME'])->first();
+        if ($fact === null || str_contains($fact->value(), '"')) {
+            return $text;
+        }
+
+        $nick = trim($fact->attribute('NICK'));
+        if ($nick === '' || str_contains($text, '"' . $nick . '"')) {
+            return $text;
+        }
+
+        // Vornamen = Teil vor dem Familiennamen, ohne Rufnamen-Stern
+        $given = trim(str_replace('*', '', (string) preg_replace('/\/.*$/s', '', $fact->value())));
+        if ($given === '') {
+            // Ohne Vornamen zeigt webtrees "… Familienname"
+            $given = str_starts_with($text, '…') ? '…' : '';
+            if ($given === '') {
+                return '"' . $nick . '" ' . $text;
+            }
+        }
+        if (str_starts_with($text, $given)) {
+            return $given . ' "' . $nick . '"' . substr($text, strlen($given));
+        }
+
+        return $text . ' "' . $nick . '"';
+    }
+
+    /**
      * Wie plain(), aber Zeilenumbrueche und Absaetze bleiben erhalten. webtrees liefert mehrzeilige Texte als HTML
      * (<br>, <p>); ohne diesen Schritt klebten die Zeilen aneinander ("seines Vaters.In der Familie ...").
      */
@@ -980,6 +1019,9 @@ trait JsonBuilders
 
     private function plain(string $html): string
     {
+        // Spitzname im Namen ("Johannes \"Jan\" /de Vries/"): webtrees macht daraus <q class="wt-nickname">, strip_tags
+        // wuerde die Anfuehrungszeichen verlieren
+        $html = (string) preg_replace('/<q class="wt-nickname">(.*?)<\/q>/s', '"$1"', $html);
         $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         // Bidi-Steuerzeichen, die webtrees um Namen und Daten legt

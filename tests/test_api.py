@@ -445,6 +445,18 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
         self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
 
+class Spitznamen(unittest.TestCase):
+    """1.18.2: Spitzname im Namen behaelt die Anfuehrungszeichen, "2 NICK" kommt hinter die Vornamen."""
+
+    def test_spitznamen(self):
+        g = U.sitzung()
+        name = lambda x: g.get("Individual", "testbaum", xref=x).json["person"]["name"]
+        self.assertEqual('Johannes "Jan" de Vries', name("I20"))
+        self.assertEqual('Pieter "Piet" Bakker', name("I21"))
+        self.assertEqual('… "Klaas" Smit', name("I22"), "ohne Vornamen hinter den Auslassungspunkten")
+        treffer = g.get("Individuals", "testbaum", q="Bakker").json["data"]
+        self.assertEqual(['Pieter "Piet" Bakker'], [p["name"] for p in treffer])
+
 class StufeDreissig(unittest.TestCase):
     """Stufe 30: Merkliste in den Favoriten, Forschungsaufgaben (_TODO), Reihenfolge, Aenderungsverlauf."""
 

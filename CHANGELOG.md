@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+**Nicknames.** A nickname written in the name (`1 NAME Johannes "Jan" /de Vries/`) keeps its quotation marks in every
+`name` the API returns – before, they were lost when webtrees' HTML was turned into text (“Johannes Jan de Vries”). A
+nickname in `2 NICK` (as many programs write it) is put in quotation marks after the given names: `Pieter "Piet" Bakker`.
+webtrees itself shows `NICK` only as a separate line; a nickname already in the name is not added twice.
+
 **API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
 with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
 features of optional modules (privacy policy, Sammlungen, …) only when they are there.

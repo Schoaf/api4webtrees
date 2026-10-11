@@ -152,8 +152,8 @@ trait MergeActions
             'user'        => Auth::user()->realName(),
             'xref'        => $xref1,
             'removed'     => $xref2,
-            'name'        => $this->plain($person1->fullName()),
-            'removedName' => $this->plain($person2->fullName()),
+            'name'        => $this->recordName($person1),
+            'removedName' => $this->recordName($person2),
             'changes'     => $ids,
             'accounts'    => $accounts,
             'undone'      => null,
@@ -316,7 +316,7 @@ trait MergeActions
                 $matches = $record !== null && $record->gedcom() === $row->new_gedcom && !$newer;
             }
             if (!$matches) {
-                $changed[] = ['xref' => $row->xref, 'name' => $record === null ? $row->xref : $this->plain($record->fullName())];
+                $changed[] = ['xref' => $row->xref, 'name' => $record === null ? $row->xref : $this->recordName($record)];
             }
         }
 
@@ -491,7 +491,7 @@ trait MergeActions
         if (in_array($tag, self::MERGE_LINK_TAGS, true)) {
             $target = $fact->target();
 
-            return $target === null ? $fact->value() : $this->plain($target->fullName());
+            return $target === null ? $fact->value() : $this->recordName($target);
         }
         $parts = [];
         $value  = $tag === 'NAME' ? trim(str_replace('/', '', $fact->value())) : $this->factValue($fact, $fact->record()->tree());
@@ -523,7 +523,7 @@ trait MergeActions
             if ($record->isPendingDeletion() || $record->xref() === $person1->xref() || $record->xref() === $person2->xref()) {
                 continue;
             }
-            $out[] = ['xref' => $record->xref(), 'type' => $record->tag(), 'name' => $this->plain($record->fullName())];
+            $out[] = ['xref' => $record->xref(), 'type' => $record->tag(), 'name' => $this->recordName($record)];
         }
 
         return $out;
@@ -542,7 +542,7 @@ trait MergeActions
             if ($a === null || $b === null || $a->xref() === $b->xref() || !$a->canShow() || !$b->canShow()) {
                 return;
             }
-            $out[] = ['role' => $role, 'xref1' => $a->xref(), 'name1' => $this->plain($a->fullName()), 'xref2' => $b->xref(), 'name2' => $this->plain($b->fullName())];
+            $out[] = ['role' => $role, 'xref1' => $a->xref(), 'name1' => $this->recordName($a), 'xref2' => $b->xref(), 'name2' => $this->recordName($b)];
         };
         $parents = static function (Individual $p): array {
             $f = $p->childFamilies()->first();

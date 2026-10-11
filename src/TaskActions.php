@@ -268,7 +268,7 @@ trait TaskActions
                 'user'    => (string) ($row->real_name ?? $row->user_name ?? ''),
                 'xref'    => $row->xref,
                 'type'    => $m[1] ?? '',
-                'name'    => $record === null ? $row->xref : $this->plain($record->fullName()),
+                'name'    => $record === null ? $row->xref : $this->recordName($record),
                 'action'  => $row->old_gedcom === '' ? 'created' : ($row->new_gedcom === '' ? 'deleted' : 'updated'),
                 'pending' => $row->status === 'pending',
             ];
@@ -288,7 +288,7 @@ trait TaskActions
         return [
             'record'     => $record->xref(),
             'recordType' => $record->tag(),
-            'name'       => $this->plain($record->fullName()),
+            'name'       => $this->recordName($record),
             'factId'     => $fact->id(),
             'text'       => $fact->value(),
             'date'       => $this->dateJson($date, $fact->attribute('DATE')),

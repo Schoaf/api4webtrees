@@ -399,7 +399,7 @@ trait ReadActions
             $people = [];
             foreach ($linked->linkedIndividuals($media)->take(self::MEDIA_LIST_PEOPLE) as $individual) {
                 if ($individual->canShowName()) {
-                    $people[] = ['xref' => $individual->xref(), 'name' => $this->plain($individual->fullName())];
+                    $people[] = ['xref' => $individual->xref(), 'name' => $this->recordName($individual)];
                 }
             }
 
@@ -542,7 +542,7 @@ trait ReadActions
                 'years'   => $fact->anniv,
                 'date'    => $this->dateJson($fact->date()),
                 'xref'    => $record->xref(),
-                'name'    => $this->plain($record->fullName()),
+                'name'    => $this->recordName($record),
                 'person'  => $record instanceof Individual ? $this->personShort($record) : null,
                 'couple'  => $couple,
             ];
@@ -1064,7 +1064,7 @@ trait ReadActions
             $data[] = [
                 'xref'    => (string) $xref,
                 'type'    => $record?->tag() ?? (preg_match('/^0 @[^@]+@ (\w+)/', $gedcom, $match) === 1 ? $match[1] : ''),
-                'name'    => $record !== null ? $this->plain($record->fullName()) : $this->nameFromGedcom($gedcom),
+                'name'    => $record !== null ? $this->recordName($record) : $this->nameFromGedcom($gedcom),
                 // neu: vor der ersten Aenderung gab es den Datensatz nicht; geloescht: nach der letzten gibt es ihn nicht mehr
                 'kind'    => $changes->first()->old_gedcom === '' ? 'new' : ($changes->last()->new_gedcom === '' ? 'deleted' : 'changed'),
                 'changes' => $changes->count(),
@@ -1124,7 +1124,7 @@ trait ReadActions
             ->filter(static fn ($repo): bool => $repo instanceof Repository && $repo->canShow())
             ->map(fn (Repository $repo): array => [
                 'xref'    => $repo->xref(),
-                'name'    => $this->plain($repo->fullName()),
+                'name'    => $this->recordName($repo),
                 'address' => GedcomText::firstValue($repo->gedcom(), 1, 'ADDR'),
                 'canEdit' => $repo->canEdit(),
                 'uses'    => (int) ($uses[$repo->xref()] ?? 0),
@@ -1179,7 +1179,7 @@ trait ReadActions
             'individuals'  => $individuals->take(self::LINKED_RECORDS_LIMIT)->map(fn (Individual $i): array => $this->personShort($i) + ['facts' => $citing_facts($i)])->values()->all(),
             'families'     => $families->take(self::LINKED_RECORDS_LIMIT)->map(fn (Family $f): array => [
                 'xref'    => $f->xref(),
-                'name'    => $this->plain($f->fullName()),
+                'name'    => $this->recordName($f),
                 'husband' => $f->husband() instanceof Individual && $f->husband()->canShowName() ? $f->husband()->xref() : null,
                 'wife'    => $f->wife() instanceof Individual && $f->wife()->canShowName() ? $f->wife()->xref() : null,
                 'facts'   => $citing_facts($f),
