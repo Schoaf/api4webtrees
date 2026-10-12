@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.19.0 – 2026-10-12
 **API level 32: farms and houses for other programs.** Everything is additive; older clients keep working.
 - **Pointer `3 _LOC` when writing.** A new or changed place at an event (routes Fact, AddIndividual, Link) gets the
   GEDCOM-L pointer `3 _LOC @L1@` to its location record when the place belongs to exactly one visible `_LOC`: the pointer
