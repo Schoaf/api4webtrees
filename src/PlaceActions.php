@@ -31,7 +31,10 @@ use function array_key_exists;
 use function array_pad;
 use function array_keys;
 use function array_map;
+use function array_key_first;
 use function array_slice;
+use function array_sum;
+use function array_unique;
 use function arsort;
 use function count;
 use function explode;
@@ -143,6 +146,7 @@ trait PlaceActions
             'parent'          => count($levels) > 1 ? implode(', ', array_slice($levels, 1)) : null,
             'children'        => $children,
             'events'          => $here['events'],
+            'unlinked'        => max(0, $here['events'] - array_sum($here['locs'])),
             'eventCounts'     => $this->eventCounts($here['facts']),
             'lat'             => $lat,
             'lng'             => $lng,
@@ -352,6 +356,11 @@ trait PlaceActions
             return $this->error(400, 'invalid-gov');
         }
 
+        // GOV-Typnummer der Art (ab Stufe 32): Ziffern, null oder leer entfernt sie
+        if (array_key_exists('govType', $body) && $body['govType'] !== null && preg_match('/^\d{1,6}$/', trim((string) $body['govType'])) !== 1) {
+            return $this->error(400, 'invalid-gov-type');
+        }
+
         $has_coordinates = array_key_exists('lat', $body) || array_key_exists('lng', $body);
         $lat         = $body['lat'] ?? null;
         $lng         = $body['lng'] ?? null;
@@ -398,7 +407,16 @@ trait PlaceActions
             if ($denied !== null) {
                 return $denied;
             }
-            $location->updateRecord($this->locationGedcom($location->gedcom(), $body), true);
+            $gedcom = $this->locationGedcom($location->gedcom(), $body);
+            if ($gedcom !== $location->gedcom()) {
+                $location->updateRecord($gedcom, true);
+            }
+        }
+
+        // Ab Stufe 32: linkEvents true gibt allen Ereignissen am Ort ohne Verweis den Verweis "3 _LOC" auf diesen _LOC -
+        // andere Programme (Online-OFB: Hoefeliste) finden den Ort nur darueber, nicht ueber den Namen.
+        if (($body['linkEvents'] ?? false) === true) {
+            $linked += $this->linkEvents($here, $location->xref());
         }
 
         $mapData = false;
@@ -469,25 +487,32 @@ trait PlaceActions
         }
 
         // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...) - ab Stufe 27. GEDCOM-L erlaubt mehrere Arten mit Datum, Quelle
-        // und GOV-Typnummer (2 _GOVTYPE); geaendert wird nur der Wert der juengsten Art, ihre Unterzeilen und aeltere
-        // Arten bleiben. Leer entfernt alle Arten.
-        if (array_key_exists('type', $body)) {
-            $type  = GedcomText::line($this->str($body, 'type'));
+        // und GOV-Typnummer (2 _GOVTYPE); geaendert wird nur die juengste Art, ihre Unterzeilen und aeltere Arten bleiben.
+        // Leer entfernt alle Arten. govType (ab Stufe 32) setzt oder entfernt "2 _GOVTYPE" der juengsten Art; ohne
+        // govType bleibt eine vorhandene GOV-Typnummer stehen wie bisher.
+        if (array_key_exists('type', $body) || array_key_exists('govType', $body)) {
             $types = GedcomText::subrecords($rest, 1, 'TYPE');
+            $type  = array_key_exists('type', $body) ? GedcomText::line($this->str($body, 'type')) : ($types === [] ? '' : trim($types[count($types) - 1][0]));
             $rest  = GedcomText::replaceSubrecords($rest, 1, 'TYPE', '');
             if ($type !== '') {
                 $latest = array_pop($types);
                 foreach ($types as $t) {
                     $rest .= "\n1 TYPE " . $t[0] . $t[1];
                 }
-                $rest .= "\n1 TYPE " . $type . ($latest[1] ?? '');
+                $subs = $latest[1] ?? '';
+                if (array_key_exists('govType', $body)) {
+                    $govType = trim((string) ($body['govType'] ?? ''));
+                    $subs    = GedcomText::replaceSubrecords($subs, 2, '_GOVTYPE', '');
+                    $subs    = ($govType === '' ? '' : "\n2 _GOVTYPE " . $govType) . $subs;
+                }
+                $rest .= "\n1 TYPE " . $type . $subs;
             }
         }
 
-        // Uebergeordneter Ort ("1 _LOC @L1@"): ersetzt alle Hierarchiezeiger; null oder leer loest den Ort heraus
+        // Uebergeordneter Ort ("1 _LOC @L1@"): ab Stufe 32 aendert sich nur der aktuelle politische Zeiger, datierte
+        // Zeiger frueherer Zeitraeume und kirchliche/geografische Zeiger bleiben; null oder leer loest den aktuellen.
         if (array_key_exists('parent', $body)) {
-            $parent = trim((string) ($body['parent'] ?? ''), '@ ');
-            $rest   = GedcomText::replaceSubrecords($rest, 1, '_LOC', $parent === '' ? '' : "\n1 _LOC @" . $parent . '@');
+            $rest = $this->replaceCurrentParent($rest, trim((string) ($body['parent'] ?? ''), '@ '));
         }
 
         // Die verknuepften Medienobjekte (wie bei Source): die Liste ersetzt alle "1 OBJE @M@"
@@ -504,6 +529,151 @@ trait PlaceActions
         $number = rtrim(rtrim(sprintf('%.6F', abs($value)), '0'), '.');
 
         return ($value < 0 ? $minus : $plus) . $number;
+    }
+
+    /**
+     * Ab Stufe 32: Jedes "2 PLAC" in diesem GEDCOM-Text ohne Verweis bekommt "3 _LOC @L1@", wenn sich der Ort genau
+     * einem sichtbaren _LOC zuordnen laesst (GEDCOM-L). Andere Programme - etwa die Hoefeliste der Online-OFB - finden
+     * den Ortsdatensatz nur ueber diesen Verweis, nicht ueber den Namen. Steht schon ein Verweis da, nichts zuzuordnen
+     * oder gibt es im Baum gar keinen _LOC, bleibt der Text unveraendert.
+     */
+    private function withLocPointers(Tree $tree, string $gedcom): string
+    {
+        if (!str_contains($gedcom, "\n2 PLAC ")
+            || !DB::table('other')->where('o_file', '=', $tree->id())->where('o_type', '=', '_LOC')->exists()) {
+            return $gedcom;
+        }
+
+        $context = null;
+
+        return (string) preg_replace_callback('/(\n2 PLAC ([^\n]*))((?:\n[3-9] [^\n]*)*)/', function (array $m) use ($tree, &$context): string {
+            $name = $this->placeName($m[2]);
+            if ($name === '' || preg_match('/\n3 _LOC /', $m[3]) === 1) {
+                return $m[0];
+            }
+            $context ??= $this->placeContext($tree);
+            $xref     = $this->locationForNewEvent($tree, $name, $context);
+
+            return $xref === null ? $m[0] : $m[1] . $m[3] . "\n3 _LOC @" . $xref . '@';
+        }, $gedcom);
+    }
+
+    /**
+     * Der _LOC fuer ein Ereignis, das gerade diesen Ort bekommt - oder keiner. Strenger als beim Lesen, weil der Verweis
+     * dauerhaft im GEDCOM steht: 1. was andere Ereignisse mit demselben Ort als Verweis tragen (der haeufigste),
+     * 2. Bindung oder GOV-Kennung des Ortsregisters, 3. ein _LOC, dessen Name entlang der _LOC-Hierarchie vorn im
+     * Ortsnamen steht ("Hof Nr. 3" unter "Bienenbuettel" passt zu "Hof Nr. 3, Bienenbuettel, Uelzen") - genau einer; hat
+     * er keinen Oberort, muss auch der Blattname im Baum eindeutig sein.
+     *
+     * @param array<string,mixed> $context
+     */
+    private function locationForNewEvent(Tree $tree, string $name, array $context): string|null
+    {
+        $locs = $context['locs'];
+        $key  = mb_strtolower($name);
+
+        // 1. Verweise an anderen Ereignissen mit diesem Ort - direkt im GEDCOM-Text gesucht, ohne Datensaetze zu bauen.
+        // % und _ im Namen bleiben Platzhalter (nicht jede Datenbank kennt dasselbe Escape-Zeichen), ein Backslash wird
+        // einer; genau prueft danach der regulaere Ausdruck.
+        $like     = '%' . str_replace('\\', '_', "\n2 PLAC " . $name . "\n") . '%';
+        $pointers = [];
+        foreach (['individuals' => 'i', 'families' => 'f'] as $table => $p) {
+            $rows = DB::table($table)->where($p . '_file', '=', $tree->id())
+                ->where($p . '_gedcom', 'LIKE', $like)->where($p . '_gedcom', 'LIKE', '%3 _LOC @%')
+                ->limit(200)->pluck($p . '_gedcom');
+            foreach ($rows as $gedcom) {
+                preg_match_all('/\n2 PLAC ' . preg_quote($name, '/') . '((?:\n[3-9] [^\n]*)*)/', (string) $gedcom, $found);
+                foreach ($found[1] as $sub) {
+                    if (preg_match('/\n3 _LOC @([^@]+)@/', $sub, $l) === 1 && isset($locs[$l[1]])) {
+                        $pointers[$l[1]] = ($pointers[$l[1]] ?? 0) + 1;
+                    }
+                }
+            }
+        }
+        if ($pointers !== []) {
+            arsort($pointers);
+
+            return (string) array_key_first($pointers);
+        }
+
+        // 2. Ortsregister
+        $bound = $context['bound'][$key] ?? null;
+        if ($bound !== null && isset($locs[$bound])) {
+            return $bound;
+        }
+        $gov = $context['boundGov'][$key] ?? null;
+        if ($gov !== null && count($context['byGov'][$gov] ?? []) === 1) {
+            return $context['byGov'][$gov][0];
+        }
+
+        // 3. Name entlang der _LOC-Hierarchie
+        $parts = explode(', ', $key);
+        $found = [];
+        foreach (array_unique($context['byName'][$parts[0]] ?? []) as $xref) {
+            $full = explode(', ', mb_strtolower($this->locFullName($locs[$xref], $locs)));
+            if (array_slice($parts, 0, count($full)) === $full) {
+                $found[$xref] = count($full);
+            }
+        }
+        if (count($found) !== 1) {
+            return null;
+        }
+        $xref = (string) array_key_first($found);
+        if ($found[$xref] > 1) {
+            return $xref;
+        }
+        $leaves = ($context['leaves'][$parts[0]] ?? 0) + (isset($this->placeIdLists($tree)[$key]) ? 0 : 1);
+
+        return $leaves <= 1 ? $xref : null;
+    }
+
+    /**
+     * Den aktuellen uebergeordneten Ort eines _LOC setzen (GEDCOM-L "1 _LOC @L1@" mit "2 TYPE" und "2 DATE"). Gemeint ist
+     * der politische Zeiger (2 TYPE POLI oder ohne Art): ohne Datum, sonst der juengste mit offenem Ende. Er bekommt die
+     * neue Kennung, seine Unterzeilen bleiben; fehlt er, kommt ein neuer Zeiger mit "2 TYPE POLI" dazu. Datierte
+     * fruehere Zeiger und kirchliche (RELI), geografische (GEOG) oder kulturelle (CULT) Zeiger bleiben unberuehrt.
+     * Leer entfernt nur den aktuellen Zeiger.
+     */
+    private function replaceCurrentParent(string $rest, string $parent): string
+    {
+        $pointers = GedcomText::subrecords($rest, 1, '_LOC');
+        $current  = null;
+
+        foreach ($pointers as $i => [$value, $sub]) {
+            $type = strtoupper(trim(GedcomText::firstValue($sub, 2, 'TYPE')));
+            if ($type !== '' && $type !== 'POLI') {
+                continue;
+            }
+            $date = strtoupper(trim(GedcomText::firstValue($sub, 2, 'DATE')));
+            if ($date === '') {
+                $current = $i;
+                break;
+            }
+            // offenes Ende: "FROM 1800", "AFT 1800" - kein TO/BEF
+            if (preg_match('/\b(TO|BEF)\b/', $date) !== 1) {
+                $current = $i;
+            }
+        }
+
+        if ($current !== null && trim($pointers[$current][0]) === '@' . $parent . '@') {
+            return $rest;
+        }
+
+        $rest = GedcomText::replaceSubrecords($rest, 1, '_LOC', '');
+        foreach ($pointers as $i => [$value, $sub]) {
+            if ($i === $current) {
+                if ($parent !== '') {
+                    $rest .= "\n1 _LOC @" . $parent . '@' . $sub;
+                }
+                continue;
+            }
+            $rest .= "\n1 _LOC " . $value . $sub;
+        }
+        if ($current === null && $parent !== '') {
+            $rest .= "\n1 _LOC @" . $parent . "@\n2 TYPE POLI";
+        }
+
+        return $rest;
     }
 
     /**
@@ -798,6 +968,7 @@ trait PlaceActions
             $places[] = [
                 'name'        => $u['name'],
                 'events'      => $u['events'],
+                'unlinked'    => max(0, $u['events'] - array_sum($u['locs'])),
                 'individuals' => count($u['individuals']),
                 'families'    => count($u['families']),
                 'lat'         => $lat,
@@ -826,6 +997,7 @@ trait PlaceActions
             $places[] = [
                 'name'        => $above === '' ? $leaf : $leaf . ', ' . $above,
                 'events'      => 0,
+                'unlinked'    => 0,
                 'individuals' => 0,
                 'families'    => 0,
                 'lat'         => $lat,

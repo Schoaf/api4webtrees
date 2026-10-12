@@ -407,6 +407,62 @@ class Orte(unittest.TestCase):
         self.assertEqual("invalid-gov", s.post("Place", "testbaum", {"name": "Offenbach", "gov": "a b"}).json["error"])
         self.assertEqual("not-found", b.post("Place", "testbaum", {"name": "Markerkonfidenzort", "gov": "X"}).json["error"])
 
+    def test_zz_stufe32_verweise_art_oberort(self):
+        """Stufe 32: Verweis 3 _LOC beim Schreiben, linkEvents, unlinked, govType, nur der aktuelle Oberort aendert sich."""
+        s = U.sitzung("admin")
+        ged = lambda t, x: umgebung.sql(f"SELECT {t[0]}_gedcom FROM wt_{t} WHERE {t[0]}_id = ?", x)[0][0]  # noqa: E731
+        # 1. Neue Person mit Geburt am Hof: den Verweis tragen schon andere Ereignisse dort (I4: 3 _LOC @L3@)
+        p = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Verweis", "surname": "Probe", "sex": "M", "birthPlace": "Hof Nr. 1, Offenbach"}).json["xref"]
+        self.assertIn("2 PLAC Hof Nr. 1, Offenbach\n3 _LOC @L3@", ged("individuals", p))
+        # Hof ohne Bewohner: gefunden ueber den Namen entlang der _LOC-Hierarchie (L4 "Hof Nr. 2" unter L1 "Offenbach")
+        s.post("Fact", "testbaum", {"tag": "RESI", "place": "Hof Nr. 2, Offenbach"}, xref=p)
+        self.assertIn("2 PLAC Hof Nr. 2, Offenbach\n3 _LOC @L4@", ged("individuals", p))
+        # unbekannter Ort: kein Verweis; geaenderter Ort: der alte Verweis faellt weg, der neue kommt
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Bauer", "place": "Gibtsnicht, Offenbach"}, xref=p)
+        self.assertIn("2 PLAC Gibtsnicht, Offenbach\n", ged("individuals", p) + "\n")
+        self.assertNotIn("Gibtsnicht, Offenbach\n3 _LOC", ged("individuals", p))
+        resi = next(f["id"] for f in s.get("Individual", "testbaum", xref=p).json["facts"] if f["tag"] == "RESI")
+        s.post("Fact", "testbaum", {"factId": resi, "tag": "RESI", "place": "Hof Nr. 1, Offenbach"}, xref=p)
+        g = ged("individuals", p)
+        self.assertNotIn("_LOC @L4@", g)
+        self.assertEqual(2, g.count("3 _LOC @L3@"))
+        # 2. unlinked: Offenbach hat 3 Ereignisse, eines mit Verweis; linkEvents verknuepft den Rest, der _LOC bleibt unveraendert
+        liste = {o["name"]: o for o in s.get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual((3, 2), (liste["Offenbach"]["events"], liste["Offenbach"]["unlinked"]))
+        self.assertEqual(0, liste["Hof Nr. 1, Offenbach"]["unlinked"])
+        vorher = ged("other", "L1")
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "linkEvents": True}).json
+        self.assertEqual((True, 2), (a["ok"], a["linked"]), a)
+        self.assertEqual(vorher, ged("other", "L1"))
+        self.assertEqual(0, s.get("Place", "testbaum", name="Offenbach").json["unlinked"])
+        # 3. govType setzt und entfernt 2 _GOVTYPE der juengsten Art; ohne govType bleibt sie
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "type": "Mühle", "govType": "87"}).json["ok"])
+        self.assertIn("1 TYPE Mühle\n2 _GOVTYPE 87", ged("other", "L4"))
+        self.assertEqual(("Mühle", "87"), tuple(s.get("Place", "testbaum", name="Hof Nr. 2, Offenbach").json["location"][k] for k in ("type", "govType")))
+        s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "govType": None})
+        self.assertNotIn("_GOVTYPE", ged("other", "L4"))
+        self.assertIn("1 TYPE Mühle", ged("other", "L4"))
+        self.assertEqual("invalid-gov-type", s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "govType": "Hof"}).json["error"])
+        s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "type": "Haus", "govType": "24"})
+        self.assertIn("1 TYPE Haus\n2 _GOVTYPE 24", ged("other", "L4"))
+        # 4. Oberort: nur der aktuelle politische Zeiger aendert sich, fruehere und kirchliche bleiben
+        alt = ged("other", "L3")
+        umgebung.sql("UPDATE wt_other SET o_gedcom = ? WHERE o_id = 'L3'", alt + "\n1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1700 TO 1799\n1 _LOC @L4@\n2 TYPE RELI")
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": "L4"}).json["ok"])
+        g = ged("other", "L3")
+        self.assertIn("1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1800", g, "aktueller Zeiger: neue Kennung, Unterzeilen bleiben")
+        self.assertIn("1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1700 TO 1799", g)
+        self.assertIn("1 _LOC @L4@\n2 TYPE RELI", g)
+        self.assertNotIn("_LOC @L1@", g)
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": None})
+        g = ged("other", "L3")
+        self.assertEqual((2, 0), (g.count("1 _LOC @L4@"), g.count("2 DATE FROM 1800")), "leer loest nur den aktuellen")
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": "L1"})
+        self.assertIn("1 _LOC @L1@\n2 TYPE POLI", ged("other", "L3"), "neuer Zeiger bekommt 2 TYPE POLI")
+        umgebung.sql("UPDATE wt_other SET o_gedcom = ? WHERE o_id = 'L3'", alt)
+        # aufraeumen: die Probeperson weg, damit die folgenden Tests die alten Zahlen sehen
+        self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=p).json["ok"])
+
     def test_zzz_umbenennen_und_zusammenfuehren(self):
         """Stufe 23: POST PlaceRename - nach dem Schreibtest, weil es den Testbaum aendert."""
         s = U.sitzung("admin")

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+**API level 32: farms and houses for other programs.** Everything is additive; older clients keep working.
+- **Pointer `3 _LOC` when writing.** A new or changed place at an event (routes Fact, AddIndividual, Link) gets the
+  GEDCOM-L pointer `3 _LOC @L1@` to its location record when the place belongs to exactly one visible `_LOC`: the pointer
+  other events with this place already carry, the Ortsregister binding, or the `_LOC` name along its hierarchy
+  (“Hof Nr. 3” under “Bienenbüttel” fits “Hof Nr. 3, Bienenbüttel, Uelzen”; without a superior place the leaf name must
+  be unique). Other programs, such as the farm list of the Online-OFB, find the location record only through this
+  pointer, not by name. Unchanged places stay as they are.
+- **`POST Place` with `linkEvents: true`** gives every event at the place without a pointer the pointer to this `_LOC`
+  (`linked`: how many). `Places?list=1` and `Place` report `unlinked`, the events without a pointer. A request that
+  changes nothing in the `_LOC` no longer writes it.
+- **`POST Place` with `govType`** sets or (`null`) removes the GOV type number `2 _GOVTYPE` of the latest TYPE
+  (24 farm, 87 mill …). Without `govType` an existing number stays, as before.
+- **`parent` keeps the history.** `POST Place` with `parent` now changes only the current political pointer
+  `1 _LOC @…@` (undated, else the latest open-ended one; its date and sources stay). Earlier dated pointers and church,
+  geographic or cultural ones stay; a new pointer gets `2 TYPE POLI`; `null` detaches only the current one. Up to level 31
+  all hierarchy pointers were replaced.
+
 ## 1.18.2 – 2026-10-11
 - **Nicknames.** A nickname written in the name (`1 NAME Johannes "Jan" /de Vries/`) keeps its quotation marks in every
   `name` the API returns – before, they were lost when webtrees' HTML was turned into text (“Johannes Jan de Vries”). A

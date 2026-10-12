@@ -141,6 +141,13 @@ trait WriteActions
             return $this->error(400, $problem);
         }
 
+        // Neuer oder geaenderter Ort: Verweis "3 _LOC" auf den Ortsdatensatz, wenn eindeutig (ab Stufe 32)
+        $old_place = preg_match('/\n2 PLAC ([^\n]*)/', $old?->gedcom() ?? '', $op) === 1 ? trim($op[1]) : null;
+        $new_place = preg_match('/\n2 PLAC ([^\n]*)/', $gedcom, $np) === 1 ? trim($np[1]) : null;
+        if ($new_place !== null && $new_place !== $old_place) {
+            $gedcom = $this->withLocPointers($tree, $gedcom);
+        }
+
         if ($old === null) {
             $record->createFact($gedcom, true);
         } else {
@@ -949,10 +956,10 @@ trait WriteActions
         $gedcom .= GedcomText::eventGedcom('DEAT', $this->str($body, 'deathDate'), $this->str($body, 'deathPlace'), ($body['dead'] ?? false) === true);
         $gedcom .= $extra_gedcom;
 
-        $new = $tree->createIndividual($gedcom);
+        $new = $tree->createIndividual($this->withLocPointers($tree, $gedcom));
 
         if ($relative !== null) {
-            $marriage = GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false);
+            $marriage = $this->withLocPointers($tree, GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false));
             $family   = $this->attach($relation, $new, $relative, $family, $marriage, false);
         }
 
@@ -1014,7 +1021,7 @@ trait WriteActions
             return $this->error(409, 'link-exists');
         }
 
-        $marriage = GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false);
+        $marriage = $this->withLocPointers($tree, GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false));
         $family   = $this->attach($relation, $individual, $relative, $family, $marriage, true);
 
         return $this->written($individual, ['family' => $family->xref()]);
