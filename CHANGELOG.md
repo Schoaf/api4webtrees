@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.0 – 2026-10-13
 **API level 33: address at events.** Additive.
 - **`address` at every fact** (Individual, Family, Export): the event's `2 ADDR` with its continuation lines (or `3 ADR1`
   when ADDR itself is empty), `null` without one. Many programs store a farm or house as the address of a residence
