@@ -168,8 +168,9 @@ ROUTEN = [
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing. From level 32 a new or "
      "changed place gets the GEDCOM-L pointer `3 _LOC @L1@` when it belongs to exactly one `_LOC` record (pointers at other events "
      "with this place, the Ortsregister binding, or the `_LOC` name along its hierarchy); the same for places in AddIndividual and Link.",
-     [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
-     "`type` (level 20) sets the fact's TYPE; for MARR in webtrees' form (civil → CIVIL, religious → RELIGIOUS, PARTNERS, COMMON LAW)."),
+     [XREF], "`{factId?, tag, value?, date?, place?, address?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
+     "`type` (level 20) sets the fact's TYPE; for MARR in webtrees' form (civil → CIVIL, religious → RELIGIOUS, PARTNERS, COMMON LAW). "
+     "`address` (level 33) sets the address `2 ADDR` of the event (lines as `3 CONT`), empty removes it; facts return it as `address`."),
     ("post", "Association", True, 20, "editor",
      "Write godparents, witnesses and other associates of a fact. `linked` replaces the linked individuals (`2 _ASSO` + "
      "`3 RELA`, written as webtrees does: `godparent`/`witness`; `other` needs `rela`); an individual already linked keeps "

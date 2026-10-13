@@ -703,6 +703,30 @@ class Schreiben(unittest.TestCase):
     def beruf_anlegen(self, s, wert, **extra):
         return s.post("Fact", "testbaum", {"tag": "OCCU", "value": wert}, xref="I1", **extra)
 
+    def test_adresse_am_ereignis(self):
+        """Stufe 33: Adresse lesen und schreiben; Ort aendern und Adresse leeren laesst den Rest des Ereignisses stehen."""
+        s = U.sitzung("admin")
+        p = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Adresse", "surname": "Probe", "sex": "F", "dead": True}).json["xref"]
+        s.post("Fact", "testbaum", {"tag": "RESI", "date": "FROM 1850 TO 1870", "place": "Offenbach", "address": "Klosterstraße 3\nHinterhaus", "note": "Mieter"}, xref=p)
+        resi = next(f for f in self.fakten(s, p) if f["tag"] == "RESI")
+        self.assertEqual("Klosterstraße 3\nHinterhaus", resi["address"])
+        self.assertIsNone(next(f for f in self.fakten(s, p) if f["tag"] == "NAME")["address"])
+        g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+        self.assertIn("\n2 ADDR Klosterstraße 3\n3 CONT Hinterhaus\n2 PLAC Offenbach", g)
+        # Ort auf den Hof, Adresse weg: Datum und Notiz bleiben
+        s.post("Fact", "testbaum", {"factId": resi["id"], "tag": "RESI", "place": "Klosterstraße 3, Offenbach", "address": ""}, xref=p)
+        resi = next(f for f in self.fakten(s, p) if f["tag"] == "RESI")
+        self.assertIsNone(resi["address"])
+        self.assertEqual("Klosterstraße 3, Offenbach", resi["place"]["name"])
+        g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+        self.assertNotIn("ADDR", g)
+        self.assertIn("2 DATE FROM 1850 TO 1870", g)
+        self.assertIn("2 NOTE Mieter", g)
+        # Export liefert das Feld ebenso
+        ex = next(i for i in s.get("Export", "testbaum", page=1).json["individuals"] if i["xref"] == p)
+        self.assertIn("address", next(f for f in ex["facts"] if f["tag"] == "RESI"))
+        s.post("DeleteRecord", "testbaum", {}, xref=p)
+
     def test_gast_darf_nicht_schreiben(self):
         a = self.beruf_anlegen(U.sitzung(), "Gastberuf")
         self.assertEqual(False, a.json and a.json.get("ok"), a)

@@ -303,6 +303,8 @@ trait JsonBuilders
                 'typeLabel'      => $type === '' ? null : $this->plain(Registry::elementFactory()->make($fact->tag() . ':TYPE')->value($type, $tree)),
                 'date'           => $this->dateJson($fact->date(), $fact->attribute('DATE')),
                 'place'          => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
+                // Ab Stufe 33: Adresse am Ereignis (2 ADDR mit Fortsetzungen, sonst 3 ADR1), null ohne
+                'address'        => $this->factAddress($fact->gedcom()),
                 'notes'          => $notes,
                 'noteKinds'      => $kinds,
                 'sources'        => $this->factSources($fact, $tree),
@@ -319,6 +321,22 @@ trait JsonBuilders
         }
 
         return $data;
+    }
+
+    /** Adresse eines Ereignisses: "2 ADDR" mit "3 CONT"-Zeilen; ohne Wert die Zeile "3 ADR1". Null, wenn keine. */
+    private function factAddress(string $gedcom): string|null
+    {
+        if (preg_match('/\n2 ADDR ?([^\n]*)((?:\n3 [^\n]*)*)/', $gedcom, $m) !== 1) {
+            return null;
+        }
+
+        $text = trim(GedcomText::withContinuations($m[1], $m[2], 2));
+
+        if ($text === '' && preg_match('/\n3 ADR1 ([^\n]*)/', $m[2], $a) === 1) {
+            $text = trim($a[1]);
+        }
+
+        return $text === '' ? null : $text;
     }
 
     /**

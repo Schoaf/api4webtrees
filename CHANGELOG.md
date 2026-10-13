@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+**API level 33: address at events.** Additive.
+- **`address` at every fact** (Individual, Family, Export): the event's `2 ADDR` with its continuation lines (or `3 ADR1`
+  when ADDR itself is empty), `null` without one. Many programs store a farm or house as the address of a residence
+  (`2 PLAC Mengen`, `2 ADDR Klosterstraße 3`); clients can now turn it into a place of its own.
+- **`POST Fact` with `address`** sets or (empty) removes the address of the event; other sub-lines stay.
+
 ## 1.19.0 – 2026-10-12
 **API level 32: farms and houses for other programs.** Everything is additive; older clients keep working.
 - **Pointer `3 _LOC` when writing.** A new or changed place at an event (routes Fact, AddIndividual, Link) gets the

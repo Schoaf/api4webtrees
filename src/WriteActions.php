@@ -1535,6 +1535,13 @@ trait WriteActions
             }
         }
 
+        // Adresse (ab Stufe 33): "2 ADDR" mit Fortsetzungen ersetzen, leer entfernt sie samt Unterzeilen
+        if (array_key_exists('address', $body)) {
+            $address = GedcomText::multiline($this->str($body, 'address'), 3);
+            $gedcom  = (string) preg_replace('/\n2 ADDR.*(\n[3-9] .*)*/', '', $gedcom);
+            $gedcom  = GedcomText::insertAfterFirstLine($gedcom, $address === '' ? '' : "\n2 ADDR " . $address);
+        }
+
         if (array_key_exists('date', $body)) {
             $date   = strtoupper(GedcomText::line($this->str($body, 'date')));
             $gedcom = (string) preg_replace('/\n2 DATE.*(\n[3-9] .*)*/', '', $gedcom);
