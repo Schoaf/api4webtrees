@@ -141,6 +141,13 @@ trait WriteActions
             return $this->error(400, $problem);
         }
 
+        // Neuer oder geaenderter Ort: Verweis "3 _LOC" auf den Ortsdatensatz, wenn eindeutig (ab Stufe 32)
+        $old_place = preg_match('/\n2 PLAC ([^\n]*)/', $old?->gedcom() ?? '', $op) === 1 ? trim($op[1]) : null;
+        $new_place = preg_match('/\n2 PLAC ([^\n]*)/', $gedcom, $np) === 1 ? trim($np[1]) : null;
+        if ($new_place !== null && $new_place !== $old_place) {
+            $gedcom = $this->withLocPointers($tree, $gedcom);
+        }
+
         if ($old === null) {
             $record->createFact($gedcom, true);
         } else {
@@ -949,10 +956,10 @@ trait WriteActions
         $gedcom .= GedcomText::eventGedcom('DEAT', $this->str($body, 'deathDate'), $this->str($body, 'deathPlace'), ($body['dead'] ?? false) === true);
         $gedcom .= $extra_gedcom;
 
-        $new = $tree->createIndividual($gedcom);
+        $new = $tree->createIndividual($this->withLocPointers($tree, $gedcom));
 
         if ($relative !== null) {
-            $marriage = GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false);
+            $marriage = $this->withLocPointers($tree, GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false));
             $family   = $this->attach($relation, $new, $relative, $family, $marriage, false);
         }
 
@@ -1014,7 +1021,7 @@ trait WriteActions
             return $this->error(409, 'link-exists');
         }
 
-        $marriage = GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false);
+        $marriage = $this->withLocPointers($tree, GedcomText::eventGedcom('MARR', $this->str($body, 'marriageDate'), $this->str($body, 'marriagePlace'), false));
         $family   = $this->attach($relation, $individual, $relative, $family, $marriage, true);
 
         return $this->written($individual, ['family' => $family->xref()]);
@@ -1411,7 +1418,17 @@ trait WriteActions
 
         $first = $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->first();
 
-        if ($first === $links[0]) {
+        // Ab Stufe 35 auch nach GEDCOM-L: "2 _PRIM Y" an diesem Verweis, an den anderen Verweisen faellt _PRIM weg -
+        // so zeigen andere Programme dasselbe Hauptbild wie webtrees (das erste Bild).
+        $prim = static function (Fact $fact, bool $hauptbild): string {
+            $gedcom = GedcomText::replaceSubrecords("\n" . $fact->gedcom(), 2, '_PRIM', $hauptbild ? "\n2 _PRIM Y" : '');
+
+            return substr($gedcom, 1);
+        };
+        $schon = $first === $links[0] && strtoupper(trim($links[0]->attribute('_PRIM'))) === 'Y'
+            && $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->filter(static fn (Fact $f): bool => $f !== $links[0] && $f->attribute('_PRIM') !== '')->isEmpty();
+
+        if ($schon) {
             return $this->written($record);
         }
 
@@ -1419,11 +1436,11 @@ trait WriteActions
 
         foreach ($record->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
             if ($fact === $first) {
-                $lines[] = $links[0]->gedcom();
+                $lines[] = $prim($links[0], true);
             }
 
             if ($fact !== $links[0]) {
-                $lines[] = $fact->gedcom();
+                $lines[] = $fact->tag() === $record->tag() . ':OBJE' ? $prim($fact, false) : $fact->gedcom();
             }
         }
 
@@ -1526,6 +1543,13 @@ trait WriteActions
                 $gedcom = (string) preg_replace('/\n2 PLAC.*(\n[3-9] .*)*/', '', $gedcom);
                 $gedcom = GedcomText::insertAfterFirstLine($gedcom, $place === '' ? '' : "\n2 PLAC " . $place);
             }
+        }
+
+        // Adresse (ab Stufe 33): "2 ADDR" mit Fortsetzungen ersetzen, leer entfernt sie samt Unterzeilen
+        if (array_key_exists('address', $body)) {
+            $address = GedcomText::multiline($this->str($body, 'address'), 3);
+            $gedcom  = (string) preg_replace('/\n2 ADDR.*(\n[3-9] .*)*/', '', $gedcom);
+            $gedcom  = GedcomText::insertAfterFirstLine($gedcom, $address === '' ? '' : "\n2 ADDR " . $address);
         }
 
         if (array_key_exists('date', $body)) {

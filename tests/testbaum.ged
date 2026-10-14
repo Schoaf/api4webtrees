@@ -110,6 +110,25 @@
 3 RELA godmother
 2 NOTE Paten: Markerlebend-Pate, Bauer
 1 FAMC @F2@
+0 @I20@ INDI
+1 NAME Johannes "Jan" /de Vries/
+1 SEX M
+1 DEAT
+2 DATE 1901
+0 @I21@ INDI
+1 NAME Pieter /Bakker/
+2 GIVN Pieter
+2 SURN Bakker
+2 NICK Piet
+1 SEX M
+1 DEAT
+2 DATE 1902
+0 @I22@ INDI
+1 NAME /Smit/
+2 NICK Klaas
+1 SEX M
+1 DEAT
+2 DATE 1903
 0 @F1@ FAM
 1 HUSB @I1@
 1 WIFE @I2@

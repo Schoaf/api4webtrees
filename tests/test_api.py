@@ -407,6 +407,62 @@ class Orte(unittest.TestCase):
         self.assertEqual("invalid-gov", s.post("Place", "testbaum", {"name": "Offenbach", "gov": "a b"}).json["error"])
         self.assertEqual("not-found", b.post("Place", "testbaum", {"name": "Markerkonfidenzort", "gov": "X"}).json["error"])
 
+    def test_zz_stufe32_verweise_art_oberort(self):
+        """Stufe 32: Verweis 3 _LOC beim Schreiben, linkEvents, unlinked, govType, nur der aktuelle Oberort aendert sich."""
+        s = U.sitzung("admin")
+        ged = lambda t, x: umgebung.sql(f"SELECT {t[0]}_gedcom FROM wt_{t} WHERE {t[0]}_id = ?", x)[0][0]  # noqa: E731
+        # 1. Neue Person mit Geburt am Hof: den Verweis tragen schon andere Ereignisse dort (I4: 3 _LOC @L3@)
+        p = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Verweis", "surname": "Probe", "sex": "M", "birthPlace": "Hof Nr. 1, Offenbach"}).json["xref"]
+        self.assertIn("2 PLAC Hof Nr. 1, Offenbach\n3 _LOC @L3@", ged("individuals", p))
+        # Hof ohne Bewohner: gefunden ueber den Namen entlang der _LOC-Hierarchie (L4 "Hof Nr. 2" unter L1 "Offenbach")
+        s.post("Fact", "testbaum", {"tag": "RESI", "place": "Hof Nr. 2, Offenbach"}, xref=p)
+        self.assertIn("2 PLAC Hof Nr. 2, Offenbach\n3 _LOC @L4@", ged("individuals", p))
+        # unbekannter Ort: kein Verweis; geaenderter Ort: der alte Verweis faellt weg, der neue kommt
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Bauer", "place": "Gibtsnicht, Offenbach"}, xref=p)
+        self.assertIn("2 PLAC Gibtsnicht, Offenbach\n", ged("individuals", p) + "\n")
+        self.assertNotIn("Gibtsnicht, Offenbach\n3 _LOC", ged("individuals", p))
+        resi = next(f["id"] for f in s.get("Individual", "testbaum", xref=p).json["facts"] if f["tag"] == "RESI")
+        s.post("Fact", "testbaum", {"factId": resi, "tag": "RESI", "place": "Hof Nr. 1, Offenbach"}, xref=p)
+        g = ged("individuals", p)
+        self.assertNotIn("_LOC @L4@", g)
+        self.assertEqual(2, g.count("3 _LOC @L3@"))
+        # 2. unlinked: Offenbach hat 3 Ereignisse, eines mit Verweis; linkEvents verknuepft den Rest, der _LOC bleibt unveraendert
+        liste = {o["name"]: o for o in s.get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual((3, 2), (liste["Offenbach"]["events"], liste["Offenbach"]["unlinked"]))
+        self.assertEqual(0, liste["Hof Nr. 1, Offenbach"]["unlinked"])
+        vorher = ged("other", "L1")
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "linkEvents": True}).json
+        self.assertEqual((True, 2), (a["ok"], a["linked"]), a)
+        self.assertEqual(vorher, ged("other", "L1"))
+        self.assertEqual(0, s.get("Place", "testbaum", name="Offenbach").json["unlinked"])
+        # 3. govType setzt und entfernt 2 _GOVTYPE der juengsten Art; ohne govType bleibt sie
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "type": "Mühle", "govType": "87"}).json["ok"])
+        self.assertIn("1 TYPE Mühle\n2 _GOVTYPE 87", ged("other", "L4"))
+        self.assertEqual(("Mühle", "87"), tuple(s.get("Place", "testbaum", name="Hof Nr. 2, Offenbach").json["location"][k] for k in ("type", "govType")))
+        s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "govType": None})
+        self.assertNotIn("_GOVTYPE", ged("other", "L4"))
+        self.assertIn("1 TYPE Mühle", ged("other", "L4"))
+        self.assertEqual("invalid-gov-type", s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "govType": "Hof"}).json["error"])
+        s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "type": "Haus", "govType": "24"})
+        self.assertIn("1 TYPE Haus\n2 _GOVTYPE 24", ged("other", "L4"))
+        # 4. Oberort: nur der aktuelle politische Zeiger aendert sich, fruehere und kirchliche bleiben
+        alt = ged("other", "L3")
+        umgebung.sql("UPDATE wt_other SET o_gedcom = ? WHERE o_id = 'L3'", alt + "\n1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1700 TO 1799\n1 _LOC @L4@\n2 TYPE RELI")
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": "L4"}).json["ok"])
+        g = ged("other", "L3")
+        self.assertIn("1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1800", g, "aktueller Zeiger: neue Kennung, Unterzeilen bleiben")
+        self.assertIn("1 _LOC @L4@\n2 TYPE POLI\n2 DATE FROM 1700 TO 1799", g)
+        self.assertIn("1 _LOC @L4@\n2 TYPE RELI", g)
+        self.assertNotIn("_LOC @L1@", g)
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": None})
+        g = ged("other", "L3")
+        self.assertEqual((2, 0), (g.count("1 _LOC @L4@"), g.count("2 DATE FROM 1800")), "leer loest nur den aktuellen")
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "parent": "L1"})
+        self.assertIn("1 _LOC @L1@\n2 TYPE POLI", ged("other", "L3"), "neuer Zeiger bekommt 2 TYPE POLI")
+        umgebung.sql("UPDATE wt_other SET o_gedcom = ? WHERE o_id = 'L3'", alt)
+        # aufraeumen: die Probeperson weg, damit die folgenden Tests die alten Zahlen sehen
+        self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=p).json["ok"])
+
     def test_zzz_umbenennen_und_zusammenfuehren(self):
         """Stufe 23: POST PlaceRename - nach dem Schreibtest, weil es den Testbaum aendert."""
         s = U.sitzung("admin")
@@ -444,6 +500,18 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
         self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
         self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
+
+class Spitznamen(unittest.TestCase):
+    """1.18.2: Spitzname im Namen behaelt die Anfuehrungszeichen, "2 NICK" kommt hinter die Vornamen."""
+
+    def test_spitznamen(self):
+        g = U.sitzung()
+        name = lambda x: g.get("Individual", "testbaum", xref=x).json["person"]["name"]
+        self.assertEqual('Johannes "Jan" de Vries', name("I20"))
+        self.assertEqual('Pieter "Piet" Bakker', name("I21"))
+        self.assertEqual('… "Klaas" Smit', name("I22"), "ohne Vornamen hinter den Auslassungspunkten")
+        treffer = g.get("Individuals", "testbaum", q="Bakker").json["data"]
+        self.assertEqual(['Pieter "Piet" Bakker'], [p["name"] for p in treffer])
 
 class StufeDreissig(unittest.TestCase):
     """Stufe 30: Merkliste in den Favoriten, Forschungsaufgaben (_TODO), Reihenfolge, Aenderungsverlauf."""
@@ -628,12 +696,211 @@ class Zusammenfuehren(unittest.TestCase):
             adm.post("Reject", "testbaum", {})
 
 
+GEDCOML = ("_RUFNAME", "_UID", "_GOV", "_POST", "_MAIDENHEAD", "_NAME", "_GODP", "_ASSO", "_WITN", "_PRIM", "_TODO", "_CAT",
+           "_PRTY", "_CDATE", "_RDATE", "_STAT", "_LOC", "_AIDN", "_DMGD", "_GOVTYPE")
+GEDCOML_TABELLEN = {"I": ("wt_individuals", "i"), "F": ("wt_families", "f"), "S": ("wt_sources", "s"), "M": ("wt_media", "m")}
+
+
+def gedcoml_ged(xref):
+    """Der rohe Datensatz im Baum gedcoml (andere Baeume haben dieselben Kennungen)."""
+    baum = umgebung.sql("SELECT gedcom_id FROM wt_gedcom WHERE gedcom_name = 'gedcoml'")[0][0]
+    tabelle, p = GEDCOML_TABELLEN.get(xref[0], ("wt_other", "o"))
+    return umgebung.sql(f"SELECT {p}_gedcom FROM {tabelle} WHERE {p}_id = ? AND {p}_file = ?", xref, baum)[0][0]
+
+
+def gedcoml_pfade(gedcom):
+    """Jede Zeile mit einem GEDCOM-L-Tag oder unter einem: Pfad aus den Tags der Eltern plus eigene Zeile (ohne Ebene).
+    So bleibt der Vergleich gueltig, wenn sich Werte der Eltern aendern (anderes Datum am Ereignis, anderer Aufgabentext)."""
+    pfade, stapel = set(), []
+    for zeile in gedcom.split("\n"):
+        teile = zeile.split(" ", 2)
+        if len(teile) < 2 or not teile[0].isdigit():
+            continue
+        ebene, tag, wert = int(teile[0]), teile[1], teile[2] if len(teile) > 2 else ""
+        del stapel[ebene:]
+        stapel.append(tag)
+        if ebene > 0 and any(t in GEDCOML for t in stapel):
+            pfade.add("/".join(stapel[:-1]) + "|" + tag + " " + wert)
+    return pfade
+
+
+class GedcomL(unittest.TestCase):
+    """Stufe 34: alle Angaben des GEDCOM-L-Addendums lesen - und nichts davon verlieren, wenn die App schreibt."""
+
+    def test_a_lesen(self):
+        s = U.sitzung("admin")
+        p = s.get("Individual", "gedcoml", xref="I1").json
+        self.assertEqual(["2B7A6D3E1F904C5A8E1D2C3B4A5F6E7D8C9B"], p["uids"])
+        birt = next(f for f in p["facts"] if f["tag"] == "BIRT")
+        self.assertEqual([{"tag": "PLAC:_GOV", "value": "HOFNR3JO53PC", "date": None},
+                          {"tag": "PLAC:_POST", "value": "29553", "date": "FROM 1993"},
+                          {"tag": "PLAC:_MAIDENHEAD", "value": "JO53PC", "date": None},
+                          {"tag": "ADDR:_NAME", "value": "Familie Mohwinkel", "date": None}], birt["extras"])
+        self.assertEqual([], next(f for f in p["facts"] if f["tag"] == "OCCU")["extras"])
+        self.assertEqual(True, p["media"][0]["highlighted"])
+        aufgabe = p["tasks"][0]
+        self.assertEqual(("Taufeintrag im Kirchenbuch prüfen", "Kirchenbuch", "1", "0", "open", "Eintrag gefunden auf Seite 19"),
+                         (aufgabe["description"], aufgabe["category"], aufgabe["priority"], aufgabe["taskType"], aufgabe["status"], aufgabe["solution"]))
+        self.assertEqual(("R1", "Pfarramt Bienenbüttel"), (aufgabe["repository"]["xref"], aufgabe["repository"]["name"]))
+        self.assertEqual((2026, 2026), (aufgabe["completed"]["year"], aufgabe["reminder"]["year"]))
+        fam = s.get("Family", "gedcoml", xref="F1").json
+        self.assertEqual(["AAAABBBBCCCCDDDDEEEEFFFF00001111"], fam["uids"])
+        # _STAT kommt als Fakt mit uebersetztem Wert (wie webtrees ihn zeigt)
+        self.assertNotEqual("", next(f for f in fam["facts"] if f["tag"] == "_STAT")["value"])
+        self.assertEqual(("6", None), (fam["tasks"][0]["priority"], fam["tasks"][0]["description"]))
+        loc = s.get("Place", "gedcoml", name="Bienenbüttel").json["location"]
+        self.assertEqual([{"value": "Bienenbüttel", "date": "FROM 1900", "lang": None, "abbr": "Bbüttel"},
+                          {"value": "Bienenbuettel", "date": "BEF 1900", "lang": "German", "abbr": None}], loc["names"])
+        self.assertEqual([{"value": "Dorf", "date": "BEF 1972", "govType": "55"},
+                          {"value": "Gemeinde", "date": "FROM 1972", "govType": "54"}], loc["types"])
+        self.assertEqual(("Gemeinde", "54"), (loc["type"], loc["govType"]))
+        self.assertEqual([{"value": "03360004", "date": "FROM 1972", "type": "AGS"}], loc["adminIds"])
+        self.assertEqual(["1200", "6500"], [d["value"] for d in loc["demographics"]])
+        self.assertEqual([{"value": "29553", "date": "FROM 1993"}], loc["postalCodes"])
+        self.assertEqual(("JO53PC", "evangelisch-lutherisch", ["8888DDDD8888DDDD8888DDDD8888DDDD"]),
+                         (loc["maidenhead"], loc["religion"], loc["uids"]))
+        # Export traegt die Zusatzangaben ebenso
+        ex = next(i for i in s.get("Export", "gedcoml", page=1).json["individuals"] if i["xref"] == "I1")
+        self.assertEqual(4, len(next(f for f in ex["facts"] if f["tag"] == "BIRT")["extras"]))
+
+    def test_b_schreiben_verliert_nichts(self):
+        s = U.sitzung("admin")
+        xrefs = ["I1", "I2", "F1", "M1", "M2", "S1", "R1", "N1", "L1", "L2"]
+        vorher = {x: gedcoml_pfade(gedcoml_ged(x)) for x in xrefs}
+        self.assertGreater(sum(len(v) for v in vorher.values()), 60)
+        fakten = {f["tag"]: f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"]}
+        ok = lambda r: self.assertEqual(True, r.json.get("ok"), r)
+        # Ereignisse aendern: Datum, Beruf, Name
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["BIRT"]["id"], "tag": "BIRT", "date": "4 MAR 1850",
+                                      "place": "Hof Nr. 3, Bienenbüttel"}, xref="I1"))
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["OCCU"]["id"], "tag": "OCCU", "value": "Hofbauer"}, xref="I1"))
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["NAME"]["id"], "value": "Johann Hinrich /Mohwinkel/"}, xref="I1"))
+        # Paten unveraendert zurueckschreiben, wie der Dialog es tut, wenn man nur speichert
+        bapm = next(f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"] if f["tag"] == "BAPM")
+        ok(s.post("Association", "gedcoml", {"factId": bapm["id"],
+            # wie der Paten-Dialog: rela nur bei "other", die Notiz nur, wenn sie geaendert wurde
+            "linked": [{"xref": a["xref"], "role": a["role"], **({"rela": a["rela"]} if a["role"] == "other" else {})} for a in bapm["associates"]],
+            "free": [{"text": a["text"], "role": a["role"]} for a in bapm["freeAssociates"]]}, xref="I1"))
+        # Quelle zitieren, Aufgabe aendern, Medium umbenennen
+        birt = next(f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"] if f["tag"] == "BIRT")
+        ok(s.post("Citation", "gedcoml", {"factId": birt["id"], "source": "S1", "page": "S. 19"}, xref="I1"))
+        aufgabe = s.get("Individual", "gedcoml", xref="I1").json["tasks"][0]
+        ok(s.post("Task", "gedcoml", {"factId": aufgabe["factId"], "text": "Taufeintrag und Paten prüfen", "date": "2 OCT 2026",
+                                      "note": "Pfarramt angeschrieben"}, xref="I1"))
+        ok(s.post("MediaObject", "gedcoml", {"title": "Hof Mohwinkel um 1900"}, xref="M1"))
+        # Familie: Heirat und Aufgabe
+        fam = s.get("Family", "gedcoml", xref="F1").json
+        marr = next(f for f in fam["facts"] if f["tag"] == "MARR")
+        ok(s.post("Fact", "gedcoml", {"factId": marr["id"], "tag": "MARR", "date": "12 MAY 1875", "place": "Bienenbüttel"}, xref="F1"))
+        ok(s.post("Task", "gedcoml", {"factId": fam["tasks"][0]["factId"], "text": "Heiratseintrag suchen (Standesamt)"}, xref="F1"))
+        # Quelle, Archiv, Orte
+        ok(s.post("Source", "gedcoml", {"author": "Pfarramt"}, xref="S1"))
+        ok(s.post("Repository", "gedcoml", {"name": "Pfarramt Bienenbüttel (Archiv)"}, xref="R1"))
+        ok(s.post("Place", "gedcoml", {"name": "Bienenbüttel", "lat": 53.15, "lng": 10.49, "type": "Samtgemeinde"}))
+        ok(s.post("Place", "gedcoml", {"name": "Hof Nr. 3, Bienenbüttel", "type": "Bauernhof"}))
+        # Umbenennen hin und zurueck
+        ok(s.post("PlaceRename", "gedcoml", {"from": "Hof Nr. 3, Bienenbüttel", "to": "Hof Nr. 3a, Bienenbüttel"}))
+        ok(s.post("PlaceRename", "gedcoml", {"from": "Hof Nr. 3a, Bienenbüttel", "to": "Hof Nr. 3, Bienenbüttel"}))
+        # Text, Datum und Notiz der Aufgaben hat der Test selbst geaendert
+        geaendert = re.compile(r"^@[^@]+@(\|_TODO |/_TODO\|(DATE|NOTE) )")
+        verloren = {x: sorted(p for p in vorher[x] - gedcoml_pfade(gedcoml_ged(x)) if not geaendert.match(p)) for x in xrefs}
+        self.assertEqual({x: [] for x in xrefs}, verloren)
+
+    def test_c_schreiben_stufe35(self):
+        """Stufe 35: Familienstand ueber Fact (roher Wert in gedcomValue), Hauptbild mit _PRIM, Aufgabenfelder."""
+        s = U.sitzung("admin")
+        ok = lambda r: self.assertEqual(True, r.json.get("ok"), r)
+        stat = next(f for f in s.get("Family", "gedcoml", xref="F1").json["facts"] if f["tag"] == "_STAT")
+        self.assertEqual("NOT MARRIED", stat["gedcomValue"])
+        ok(s.post("Fact", "gedcoml", {"factId": stat["id"], "value": "NEVER MARRIED"}, xref="F1"))
+        self.assertIn("\n1 _STAT NEVER MARRIED", gedcoml_ged("F1"))
+        self.assertIsNone(next(f for f in s.get("Family", "gedcoml", xref="F1").json["facts"] if f["tag"] == "MARR")["gedcomValue"])
+        # Hauptbild: zweites Medium anlegen und zum Hauptbild machen - _PRIM wandert mit
+        medien = s.get("Individual", "gedcoml", xref="I1").json["media"]
+        self.assertEqual([("M1", True), ("M2", False)], [(m["xref"], m["highlighted"]) for m in medien])
+        zweit = next(m for m in medien if m["xref"] == "M2")
+        ok(s.post("PrimaryMedia", "gedcoml", {"media": zweit["xref"]}, xref="I1"))
+        g = gedcoml_ged("I1")
+        self.assertIn("1 OBJE @" + zweit["xref"] + "@\n2 _PRIM Y", g)
+        self.assertNotIn("1 OBJE @M1@\n2 _PRIM Y", g)
+        medien = s.get("Individual", "gedcoml", xref="I1").json["media"]
+        self.assertEqual([("M2", True), ("M1", True)], [(m["xref"], m["highlighted"]) for m in medien])  # M1 traegt _PRIM noch an der Datei
+        # Aufgabe mit allen Feldern anlegen, dann nur den Status aendern
+        a = s.post("Task", "gedcoml", {"text": "Grabstein fotografieren", "description": "Friedhof Bienenbüttel\nzweite Reihe",
+            "category": "Friedhof", "priority": "3", "taskType": "2", "status": "open", "reminder": "1 MAY 2027", "repository": "R1"}, xref="I2").json
+        self.assertEqual(True, a.get("ok"), a)
+        g = gedcoml_ged("I2")
+        for zeile in ("2 DESC Friedhof Bienenbüttel\n3 CONT zweite Reihe", "2 _CAT Friedhof", "2 _PRTY 3", "2 TYPE 2", "2 STAT open", "2 _RDATE 1 MAY 2027", "2 REPO @R1@"):
+            self.assertIn(zeile, g)
+        t = s.get("Individual", "gedcoml", xref="I2").json["tasks"][0]
+        ok(s.post("Task", "gedcoml", {"factId": t["factId"], "text": t["text"], "status": "completed", "completed": "2 MAY 2027",
+                                      "solution": "Foto im Archiv", "reminder": ""}, xref="I2"))
+        t = s.get("Individual", "gedcoml", xref="I2").json["tasks"][0]
+        self.assertEqual(("completed", 2027, "Foto im Archiv", None, "Friedhof", "3"),
+                         (t["status"], t["completed"]["year"], t["solution"], t["reminder"], t["category"], t["priority"]))
+
+
+class Zugang(unittest.TestCase):
+    """Stufe 36: wer ein Ereignis, eine Person, eine Familie sehen darf - fuer Buecher, die weitergegeben werden (Issue 21)."""
+
+    def test_zugang(self):
+        s = U.sitzung("admin")
+        i1 = s.get("Individual", "testbaum", xref="I1").json
+        self.assertEqual("visitor", i1["person"]["access"])
+        berufe = {f["value"]: f["access"] for f in i1["facts"] if f["tag"] == "OCCU"}
+        # andere Tests legen weitere Berufe an I1 an - geprueft werden die beiden aus dem Testbaum
+        self.assertEqual(("visitor", "member"), (berufe["Schmied"], berufe["Markerberuf"]))
+        # RESN locked sperrt nur das Bearbeiten, nicht das Ansehen
+        self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "RELI")["access"])
+        self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "NAME")["access"])
+        self.assertIn("OCCU", i1["person"]["restricted"])
+        # Paten tragen ihre Sichtbarkeit: an der Taufe von I1 ist der lebende I3 Pate, I5 vertraulich
+        paten = {a["xref"]: a["access"] for f in i1["facts"] if f["tag"] == "CHR" for a in f["associates"]}
+        self.assertEqual(("member", "manager"), (paten["I3"], paten["I5"]))
+        self.assertEqual("manager", s.get("Individual", "testbaum", xref="I5").json["person"]["access"])
+        # I3 lebt; der Testbaum verbirgt Lebende vor Besuchern
+        lebend = s.get("Individual", "testbaum", xref="I3").json["person"]
+        self.assertEqual(("member", "member"), (lebend["access"], lebend["nameAccess"]))
+        self.assertEqual("visitor", i1["person"]["nameAccess"])
+        # webtrees verbirgt eine Familie, sobald ein Mitglied privat ist: F1 hat das vertrauliche Kind I5
+        self.assertEqual("manager", s.get("Family", "testbaum", xref="F1").json["access"])
+        # F2 hat das lebende Kind I3: fuer Besucher verborgen, fuer Mitglieder sichtbar
+        self.assertEqual("member", s.get("Family", "testbaum", xref="F2").json["access"])
+        ex = s.get("Export", "testbaum", page=1).json
+        self.assertTrue(all("access" in f for f in ex["families"]))
+        self.assertIn("member", [f["access"] for f in next(i for i in ex["individuals"] if i["xref"] == "I1")["facts"] if f["tag"] == "OCCU"])
+
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]
 
     def beruf_anlegen(self, s, wert, **extra):
         return s.post("Fact", "testbaum", {"tag": "OCCU", "value": wert}, xref="I1", **extra)
+
+    def test_adresse_am_ereignis(self):
+        """Stufe 33: Adresse lesen und schreiben; Ort aendern und Adresse leeren laesst den Rest des Ereignisses stehen."""
+        s = U.sitzung("admin")
+        p = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Adresse", "surname": "Probe", "sex": "F", "dead": True}).json["xref"]
+        s.post("Fact", "testbaum", {"tag": "RESI", "date": "FROM 1850 TO 1870", "place": "Offenbach", "address": "Klosterstraße 3\nHinterhaus", "note": "Mieter"}, xref=p)
+        resi = next(f for f in self.fakten(s, p) if f["tag"] == "RESI")
+        self.assertEqual("Klosterstraße 3\nHinterhaus", resi["address"])
+        self.assertIsNone(next(f for f in self.fakten(s, p) if f["tag"] == "NAME")["address"])
+        g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+        self.assertIn("\n2 ADDR Klosterstraße 3\n3 CONT Hinterhaus\n2 PLAC Offenbach", g)
+        # Ort auf den Hof, Adresse weg: Datum und Notiz bleiben
+        s.post("Fact", "testbaum", {"factId": resi["id"], "tag": "RESI", "place": "Klosterstraße 3, Offenbach", "address": ""}, xref=p)
+        resi = next(f for f in self.fakten(s, p) if f["tag"] == "RESI")
+        self.assertIsNone(resi["address"])
+        self.assertEqual("Klosterstraße 3, Offenbach", resi["place"]["name"])
+        g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+        self.assertNotIn("ADDR", g)
+        self.assertIn("2 DATE FROM 1850 TO 1870", g)
+        self.assertIn("2 NOTE Mieter", g)
+        # Export liefert das Feld ebenso
+        ex = next(i for i in s.get("Export", "testbaum", page=1).json["individuals"] if i["xref"] == p)
+        self.assertIn("address", next(f for f in ex["facts"] if f["tag"] == "RESI"))
+        s.post("DeleteRecord", "testbaum", {}, xref=p)
 
     def test_gast_darf_nicht_schreiben(self):
         a = self.beruf_anlegen(U.sitzung(), "Gastberuf")

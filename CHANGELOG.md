@@ -1,9 +1,74 @@
 # Changelog
 
-## Unreleased
-**API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
-with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
-features of optional modules (privacy policy, Sammlungen, …) only when they are there.
+## 1.21.0 – 2026-10-14
+**API levels 34 to 36: the GEDCOM-L addendum, read completely, three parts of it writable – and nothing of it lost when
+writing; who may see each fact.** Additive.
+- **Level 36 – `access`** at every fact, person (Individual, Export, all person summaries) and family: the lowest role
+  that may see it – `visitor`, `member` or `manager` – decided by webtrees itself (RESN, the tree's privacy rules per fact
+  type and person, the rules for living people; a family is hidden as soon as one member is). Person summaries also get
+  `nameAccess` (who may see the name – for living people this follows the tree setting “show living names”) and
+  `restricted`: the life events (BIRT, CHR, BAPM, DEAT, BURI, CREM, OCCU) a visitor would not see although the person
+  itself is visible; linked godparents and witnesses (`associates`) carry `access` too. Clients can thus produce books for a wider audience from a manager's login (issue 21 of the apps).
+- **Level 35 – `gedcomValue`** at every fact: the value as stored in GEDCOM when `value` shows it translated
+  (`1 _STAT NOT MARRIED` → “not married”), else `null`. Clients need it to write the value back; the family status is
+  written with the existing `POST Fact`.
+- **Level 35 – `POST PrimaryMedia`** also sets the GEDCOM-L mark `2 _PRIM Y` at the chosen media link and removes `_PRIM`
+  from the other links, so other programs show the same main picture as webtrees.
+- **Level 35 – `POST Task`** takes the GEDCOM-L fields `description`, `category`, `priority` (0–8), `taskType` (0–2),
+  `status` (open/completed/auto), `reminder`, `completed` (GEDCOM dates), `solution` and `repository` (xref). Only the
+  keys sent change; an empty value removes the line.
+- **`extras` at every fact** (Individual, Family, Export): the GEDCOM-L items that have no field of their own – at the
+  place the GOV identifier (`PLAC:_GOV`), postal code (`PLAC:_POST`, with date) and Maidenhead locator
+  (`PLAC:_MAIDENHEAD`), at the address the name of the addressee (`ADDR:_NAME`). Each as `{tag, value, date}`.
+- **`uids`** at Individual and Family: the record's `1 _UID` values.
+- **`highlighted`** at every media link of a person or family: `_PRIM Y` at the link or at the file – the image other
+  programs show as the main picture (`primary` stays webtrees' own choice, the first image).
+- **Research tasks** (`Tasks`, `tasks` at Individual/Family) with `description` (DESC), `category` (_CAT), `priority`
+  (_PRTY 0–8), `taskType` (TYPE), `status` (STAT), `reminder` (_RDATE), `completed` (_CDATE), `solution` (DATA) and
+  `repository` (REPO, `{xref, name}`).
+- **Location record** (`Place` → `location`) with `names` (all NAME lines with date, language, abbreviation), `types`
+  (all TYPE lines with date and GOV type number), `postalCodes` (with date), `adminIds` (_AIDN with type, e.g. AGS),
+  `demographics` (_DMGD with type), `maidenhead`, `religion` and `uids`.
+- **Fix: changing a research task** (`POST Task` with `factId`) no longer drops what the route does not set itself.
+  Up to 1.20 the task was rewritten from text, date, user and note, and the GEDCOM-L items (DESC, _CAT, _PRTY, TYPE,
+  STAT, _CDATE, _RDATE, DATA, REPO, _UID) and source citations were lost.
+- **Test tree `gedcoml.ged`** with every item of the addendum; a test sends it through all write routes the apps use
+  (event, name, godparents, citation, task, media object, source, repository, place, rename) and checks that every
+  GEDCOM-L line survives.
+
+## 1.20.0 – 2026-10-13
+**API level 33: address at events.** Additive.
+- **`address` at every fact** (Individual, Family, Export): the event's `2 ADDR` with its continuation lines (or `3 ADR1`
+  when ADDR itself is empty), `null` without one. Many programs store a farm or house as the address of a residence
+  (`2 PLAC Mengen`, `2 ADDR Klosterstraße 3`); clients can now turn it into a place of its own.
+- **`POST Fact` with `address`** sets or (empty) removes the address of the event; other sub-lines stay.
+
+## 1.19.0 – 2026-10-12
+**API level 32: farms and houses for other programs.** Everything is additive; older clients keep working.
+- **Pointer `3 _LOC` when writing.** A new or changed place at an event (routes Fact, AddIndividual, Link) gets the
+  GEDCOM-L pointer `3 _LOC @L1@` to its location record when the place belongs to exactly one visible `_LOC`: the pointer
+  other events with this place already carry, the Ortsregister binding, or the `_LOC` name along its hierarchy
+  (“Hof Nr. 3” under “Bienenbüttel” fits “Hof Nr. 3, Bienenbüttel, Uelzen”; without a superior place the leaf name must
+  be unique). Other programs, such as the farm list of the Online-OFB, find the location record only through this
+  pointer, not by name. Unchanged places stay as they are.
+- **`POST Place` with `linkEvents: true`** gives every event at the place without a pointer the pointer to this `_LOC`
+  (`linked`: how many). `Places?list=1` and `Place` report `unlinked`, the events without a pointer. A request that
+  changes nothing in the `_LOC` no longer writes it.
+- **`POST Place` with `govType`** sets or (`null`) removes the GOV type number `2 _GOVTYPE` of the latest TYPE
+  (24 farm, 87 mill …). Without `govType` an existing number stays, as before.
+- **`parent` keeps the history.** `POST Place` with `parent` now changes only the current political pointer
+  `1 _LOC @…@` (undated, else the latest open-ended one; its date and sources stay). Earlier dated pointers and church,
+  geographic or cultural ones stay; a new pointer gets `2 TYPE POLI`; `null` detaches only the current one. Up to level 31
+  all hierarchy pointers were replaced.
+
+## 1.18.2 – 2026-10-11
+- **Nicknames.** A nickname written in the name (`1 NAME Johannes "Jan" /de Vries/`) keeps its quotation marks in every
+  `name` the API returns – before, they were lost when webtrees' HTML was turned into text (“Johannes Jan de Vries”). A
+  nickname in `2 NICK` (as many programs write it) is put in quotation marks after the given names: `Pieter "Piet" Bakker`.
+  webtrees itself shows `NICK` only as a separate line; a nickname already in the name is not added twice.
+- **API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
+  with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
+  features of optional modules (privacy policy, Sammlungen, …) only when they are there.
 
 ## 1.18.1 – 2026-10-07
 - **Place type with GOV type number.** `Places?list=1`, `Place` and its `children` now carry `govType`: the GOV type number

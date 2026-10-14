@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Api4Webtrees;
 
+use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Elements\RelationIsDescriptor;
 use Fisharebest\Webtrees\Elements\UnknownElement;
@@ -78,7 +79,7 @@ trait JsonBuilders
     {
         return [
             'xref'     => $individual->xref(),
-            'name'     => $this->plain($individual->fullName()),
+            'name'     => $this->recordName($individual),
             'sex'      => $this->sexCode($individual),
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),
@@ -109,13 +110,19 @@ trait JsonBuilders
 
         $summary = [
             'xref'       => $individual->xref(),
-            'name'       => $this->plain($individual->fullName()),
+            'name'       => $this->recordName($individual),
             'sortName'   => $individual->sortName(),
             'given'      => $individual->canShowName() ? $given : '',
             'surname'    => $individual->canShowName() ? $surname : '',
             'sex'        => $this->sexCode($individual),
             'isDead'     => $individual->isDead(),
             'private'    => !$individual->canShow(),
+            // Ab Stufe 36: wer die Person sehen darf (visitor, member, manager) und welche ihrer Lebensdaten Besucher nicht
+            // sehen duerften - fuer Buecher zum Weitergeben ("nur, was Besucher sehen")
+            'access'     => $this->zugang($individual),
+            // wer den Namen sehen darf - bei Lebenden haengt das an der Baumeinstellung "Namen Lebender zeigen"
+            'nameAccess' => $individual->canShowName(Auth::PRIV_PRIVATE) ? 'visitor' : ($individual->canShowName(Auth::PRIV_USER) ? 'member' : 'manager'),
+            'restricted' => $this->eingeschraenkt($individual),
             'lifespan'   => $this->plain($individual->lifespan()),
             'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace()),
             'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace()),
@@ -210,7 +217,7 @@ trait JsonBuilders
                 $child_spouse = $child_family->spouse($child);
                 $marriages[]  = [
                     'family' => $child_family->xref(),
-                    'spouse' => $child_spouse instanceof Individual && $child_spouse->canShowName() ? $this->plain($child_spouse->fullName()) : '',
+                    'spouse' => $child_spouse instanceof Individual && $child_spouse->canShowName() ? $this->recordName($child_spouse) : '',
                     'date'   => $this->dateJson($child_family->getMarriageDate()),
                     'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
                 ];
@@ -220,7 +227,7 @@ trait JsonBuilders
 
         return [
             'xref'     => $family->xref(),
-            'name'     => $this->plain($family->fullName()),
+            'name'     => $this->recordName($family),
             'url'      => $family->url(),
             'husband'  => $husband instanceof Individual ? $this->personSummary($husband, $with_counts) : null,
             'wife'     => $wife instanceof Individual ? $this->personSummary($wife, $with_counts) : null,
@@ -230,6 +237,10 @@ trait JsonBuilders
             'maritalStatus' => $this->maritalStatus($family),
             'facts'    => $this->factsJson($family),
             'children' => $children,
+            // Ab Stufe 36: wer die Familie sehen darf
+            'access'   => $this->zugang($family),
+            // Ab Stufe 34: 1 _UID der Familie
+            'uids'     => $this->uidsJson($family),
         ];
     }
 
@@ -334,12 +345,21 @@ trait JsonBuilders
                 // Clients koennen solche Zeilen ausblenden; in webtrees selbst bleiben sie unveraendert erhalten.
                 'known'          => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
                 'value'          => $this->factValue($fact, $tree),
+                // Ab Stufe 35: der Wert, wie er im GEDCOM steht, wenn value ihn uebersetzt zeigt (1 _STAT NOT MARRIED ->
+                // "unverheiratet") - Clients brauchen ihn, um den Wert wieder zu schreiben. Sonst null.
+                'gedcomValue'    => $fact->value() !== $this->factValue($fact, $tree) ? $fact->value() : null,
                 'type'           => $type,
                 // TYPE so, wie webtrees ihn anzeigt (FAM:MARR:TYPE: civil -> "Standesamtliche Heirat"); unbekannte
                 // Werte bleiben roh, ohne TYPE null.
                 'typeLabel'      => $type === '' ? null : $this->plain(Registry::elementFactory()->make($fact->tag() . ':TYPE')->value($type, $tree)),
                 'date'           => $this->dateJson($fact->date(), $fact->attribute('DATE')),
                 'place'          => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
+                // Ab Stufe 33: Adresse am Ereignis (2 ADDR mit Fortsetzungen, sonst 3 ADR1), null ohne
+                'address'        => $this->factAddress($fact->gedcom()),
+                // Ab Stufe 36: wer das Ereignis sehen darf - visitor, member oder manager (RESN, Datenschutzregeln des Baums)
+                'access'         => $this->zugang($fact),
+                // Ab Stufe 34: GEDCOM-L-Angaben am Ort und an der Adresse, die sonst kein eigenes Feld haben
+                'extras'         => $this->gedcomLExtras($fact->gedcom()),
                 'notes'          => $notes,
                 'noteKinds'      => $kinds,
                 'sources'        => $this->factSources($fact, $tree),
@@ -356,6 +376,98 @@ trait JsonBuilders
         }
 
         return $data;
+    }
+
+    /**
+     * Ab Stufe 34: GEDCOM-L-Angaben (Addendum zu GEDCOM 5.5.1) an einem Ereignis, die kein eigenes Feld haben: am Ort die
+     * GOV-Kennung (3 _GOV), Postleitzahl (3 _POST, mit Datum) und der Maidenhead-Locator (3 _MAIDENHEAD), an der Adresse
+     * der Name des Empfaengers (3 _NAME). Der Verweis auf den Ortsdatensatz (3 _LOC) steckt schon in place.location.
+     *
+     * @return list<array{tag:string,value:string,date:string|null}>
+     */
+    private function gedcomLExtras(string $gedcom): array
+    {
+        $out = [];
+        foreach (['PLAC' => ['_GOV', '_POST', '_MAIDENHEAD'], 'ADDR' => ['_NAME']] as $parent => $tags) {
+            foreach (GedcomText::subrecords("\n" . $gedcom, 2, $parent) as [, $sub]) {
+                foreach ($tags as $tag) {
+                    foreach (GedcomText::subrecords($sub, 3, $tag) as [$value, $inner]) {
+                        if (trim($value) === '') {
+                            continue;
+                        }
+                        $date  = trim(GedcomText::subrecords($inner, 4, 'DATE')[0][0] ?? '');
+                        $out[] = ['tag' => $parent . ':' . $tag, 'value' => trim($value), 'date' => $date === '' ? null : $date];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ab Stufe 36: die niedrigste Rolle, die einen Datensatz oder ein Ereignis sehen darf - "visitor" (Besucher), "member"
+     * (angemeldete Mitglieder) oder "manager" (Verwalter). webtrees entscheidet wie auf seinen Seiten: RESN, die
+     * Datenschutzregeln des Baums je Ereignisart und Person, bei Personen auch die Regeln fuer Lebende.
+     */
+    private function zugang(GedcomRecord|Fact $x): string
+    {
+        if ($x->canShow(Auth::PRIV_PRIVATE)) {
+            return 'visitor';
+        }
+
+        return $x->canShow(Auth::PRIV_USER) ? 'member' : 'manager';
+    }
+
+    /**
+     * Ab Stufe 36: die Lebensdaten einer Person (BIRT, CHR, BAPM, DEAT, BURI, CREM, OCCU), die Besucher nicht sehen
+     * duerften, obwohl die Person selbst fuer sie sichtbar ist. Leer, wenn alles oeffentlich ist.
+     *
+     * @return list<string>
+     */
+    private function eingeschraenkt(Individual $individual): array
+    {
+        if (!$individual->canShow(Auth::PRIV_PRIVATE)) {
+            return [];
+        }
+        $tags = [];
+        foreach ($individual->facts(['BIRT', 'CHR', 'BAPM', 'DEAT', 'BURI', 'CREM', 'OCCU']) as $fact) {
+            if (!$fact->canShow(Auth::PRIV_PRIVATE)) {
+                $tags[] = $this->shortTag($fact->tag());
+            }
+        }
+
+        return array_values(array_unique($tags));
+    }
+
+    /**
+     * Ab Stufe 34: die eindeutigen Kennungen eines Datensatzes (1 _UID, GEDCOM-L/PAF) - Programme erkennen daran denselben
+     * Datensatz in zwei Dateien wieder.
+     *
+     * @return list<string>
+     */
+    private function uidsJson(GedcomRecord $record): array
+    {
+        return array_values(array_filter(array_map(
+            static fn (array $t): string => trim($t[0]),
+            GedcomText::subrecords("\n" . $record->gedcom(), 1, '_UID')
+        ), static fn (string $v): bool => $v !== ''));
+    }
+
+    /** Adresse eines Ereignisses: "2 ADDR" mit "3 CONT"-Zeilen; ohne Wert die Zeile "3 ADR1". Null, wenn keine. */
+    private function factAddress(string $gedcom): string|null
+    {
+        if (preg_match('/\n2 ADDR ?([^\n]*)((?:\n3 [^\n]*)*)/', $gedcom, $m) !== 1) {
+            return null;
+        }
+
+        $text = trim(GedcomText::withContinuations($m[1], $m[2], 2));
+
+        if ($text === '' && preg_match('/\n3 ADR1 ([^\n]*)/', $m[2], $a) === 1) {
+            $text = trim($a[1]);
+        }
+
+        return $text === '' ? null : $text;
     }
 
     /**
@@ -447,12 +559,14 @@ trait JsonBuilders
 
         return [
             'xref'    => $match[1],
-            'name'    => $private ? null : $this->plain($individual->fullName()),
+            'name'    => $private ? null : $this->recordName($individual),
             'sex'     => $private ? null : $this->sexCode($individual),
             'rela'    => $rela,
             'role'    => $role,
             'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $this->sexCode($individual)),
             'private' => $private,
+            // Ab Stufe 36: wer den Paten/Zeugen sehen darf (ein lebender Pate gehoert nicht in ein Buch fuer Besucher)
+            'access'  => $this->zugang($individual),
             'level1'  => $level1,
             'notes'   => $this->notesFromBlock($sub, $sub_level, $tree),
             'sources' => $this->sourcesFromBlock($sub, $sub_level, $tree),
@@ -545,7 +659,7 @@ trait JsonBuilders
                     $data[]  = [
                         'record'     => $record->xref(),
                         'recordType' => $record instanceof Family ? 'FAM' : 'INDI',
-                        'name'       => $this->plain($record->fullName()),
+                        'name'       => $this->recordName($record),
                         'tag'        => $this->shortTag($shown->tag()),
                         'label'      => $this->factLabel($shown),
                         'factId'     => $shown->id(),
@@ -589,7 +703,10 @@ trait JsonBuilders
 
             foreach ($this->mediaFilesJson($media) as $file) {
                 // factId: die Verknuepfung (1 OBJE @M1@) - fuer UnlinkMedia und PrimaryMedia.
-                $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary];
+                // highlighted (ab Stufe 34): GEDCOM-L "_PRIM Y" am Verweis oder an der Datei - so markieren andere Programme
+                // das Bild, das sie als Hauptbild zeigen; webtrees selbst nimmt weiter das erste Bild (primary).
+                $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary,
+                    'highlighted' => strtoupper(trim($fact->attribute('_PRIM'))) === 'Y' || preg_match('/\n2 _PRIM Y\b/i', $media->gedcom()) === 1];
             }
         }
 
@@ -612,7 +729,7 @@ trait JsonBuilders
 
             $data[] = [
                 'xref'    => $media->xref(),
-                'title'   => $media_file->title() !== '' ? $media_file->title() : $this->plain($media->fullName()),
+                'title'   => $media_file->title() !== '' ? $media_file->title() : $this->recordName($media),
                 'mime'    => $media_file->mimeType(),
                 'isImage' => $is_image,
                 'thumb'   => $thumb,
@@ -839,7 +956,7 @@ trait JsonBuilders
 
         return [
             'xref'         => $source->xref(),
-            'title'        => $this->plain($source->fullName()),
+            'title'        => $this->recordName($source),
             'author'       => $attr('AUTH'),
             'publication'  => $attr('PUBL'),
             'abbreviation' => $attr('ABBR'),
@@ -865,7 +982,7 @@ trait JsonBuilders
             }
             $repo = Registry::repositoryFactory()->make($m[1], $source->tree());
             if ($repo instanceof Repository && $repo->canShow()) {
-                $data[] = ['xref' => $m[1], 'name' => $this->plain($repo->fullName()), 'callNumber' => GedcomText::subrecords($sub, 2, 'CALN')[0][0] ?? ''];
+                $data[] = ['xref' => $m[1], 'name' => $this->recordName($repo), 'callNumber' => GedcomText::subrecords($sub, 2, 'CALN')[0][0] ?? ''];
             }
         }
 
@@ -929,7 +1046,7 @@ trait JsonBuilders
             }
 
             $xref  = $match[1];
-            $title = $this->plain($source->fullName());
+            $title = $this->recordName($source);
         } else {
             $xref  = '';
             $title = GedcomText::withContinuations($value, $sub, $level);
@@ -1001,6 +1118,45 @@ trait JsonBuilders
     }
 
     /**
+     * Angezeigter Name eines Datensatzes als Text. Bei Personen kommt ein Spitzname aus "2 NICK" in Anfuehrungszeichen
+     * hinter den Vornamen ("Johannes \"Jan\" de Vries") - webtrees selbst zeigt NICK nur als eigene Zeile, viele
+     * Programme schreiben den Spitznamen aber so und nicht in den Namen. Steht schon ein Spitzname im Namen, bleibt es dabei.
+     */
+    private function recordName(GedcomRecord $record): string
+    {
+        $text = $this->plain($record->fullName());
+
+        if (!$record instanceof Individual || !$record->canShowName() || $record->getPrimaryName() !== 0) {
+            return $text;
+        }
+
+        $fact = $record->facts(['NAME'])->first();
+        if ($fact === null || str_contains($fact->value(), '"')) {
+            return $text;
+        }
+
+        $nick = trim($fact->attribute('NICK'));
+        if ($nick === '' || str_contains($text, '"' . $nick . '"')) {
+            return $text;
+        }
+
+        // Vornamen = Teil vor dem Familiennamen, ohne Rufnamen-Stern
+        $given = trim(str_replace('*', '', (string) preg_replace('/\/.*$/s', '', $fact->value())));
+        if ($given === '') {
+            // Ohne Vornamen zeigt webtrees "… Familienname"
+            $given = str_starts_with($text, '…') ? '…' : '';
+            if ($given === '') {
+                return '"' . $nick . '" ' . $text;
+            }
+        }
+        if (str_starts_with($text, $given)) {
+            return $given . ' "' . $nick . '"' . substr($text, strlen($given));
+        }
+
+        return $text . ' "' . $nick . '"';
+    }
+
+    /**
      * Wie plain(), aber Zeilenumbrueche und Absaetze bleiben erhalten. webtrees liefert mehrzeilige Texte als HTML
      * (<br>, <p>); ohne diesen Schritt klebten die Zeilen aneinander ("seines Vaters.In der Familie ...").
      */
@@ -1017,6 +1173,9 @@ trait JsonBuilders
 
     private function plain(string $html): string
     {
+        // Spitzname im Namen ("Johannes \"Jan\" /de Vries/"): webtrees macht daraus <q class="wt-nickname">, strip_tags
+        // wuerde die Anfuehrungszeichen verlieren
+        $html = (string) preg_replace('/<q class="wt-nickname">(.*?)<\/q>/s', '"$1"', $html);
         $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         // Bidi-Steuerzeichen, die webtrees um Namen und Daten legt

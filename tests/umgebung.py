@@ -131,11 +131,12 @@ class Umgebung:
             raise RuntimeError("webtrees-Einrichtung fehlgeschlagen, siehe tests/.work/php.log")
 
         wt("site-setting", "USE_REGISTRATION_MODULE", "0")
-        for name, titel, datei in (("testbaum", "Testbaum", "testbaum.ged"), ("geheim", "Geheimer Baum", "geheim.ged")):
+        for name, titel, datei in (("testbaum", "Testbaum", "testbaum.ged"), ("geheim", "Geheimer Baum", "geheim.ged"),
+                                   ("gedcoml", "GEDCOM-L", "gedcoml.ged")):
             wt("tree", name, "--create", f"--title={titel}")
             wt("tree-import", name, os.path.join(HIER, datei))
         # testbaum oeffentlich (Gaeste sehen Verstorbene), geheim nur fuer Angemeldete mit Rolle.
-        sql("UPDATE wt_gedcom SET private=1 WHERE gedcom_name='geheim'")
+        sql("UPDATE wt_gedcom SET private=1 WHERE gedcom_name IN ('geheim', 'gedcoml')")
         wt("tree-setting", "testbaum", "HIDE_LIVE_PEOPLE", "1")
         wt("user-setting", "admin", "auto_accept", "1")
         for name, rolle in KONTEN.items():
