@@ -291,6 +291,8 @@ trait ReadActions
             // Ab Stufe 30: Forschungsaufgaben (_TODO) und letzte Aenderung (CHAN) der Person
             'tasks'          => $this->tasksJson($individual),
             'lastChange'     => $this->lastChangeJson($individual),
+            // Ab Stufe 34: 1 _UID der Person
+            'uids'           => $this->uidsJson($individual),
         ]);
     }
 

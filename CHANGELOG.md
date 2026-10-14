@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+**API level 34: the GEDCOM-L addendum, read completely – and nothing of it lost when writing.** Additive.
+- **`extras` at every fact** (Individual, Family, Export): the GEDCOM-L items that have no field of their own – at the
+  place the GOV identifier (`PLAC:_GOV`), postal code (`PLAC:_POST`, with date) and Maidenhead locator
+  (`PLAC:_MAIDENHEAD`), at the address the name of the addressee (`ADDR:_NAME`). Each as `{tag, value, date}`.
+- **`uids`** at Individual and Family: the record's `1 _UID` values.
+- **`highlighted`** at every media link of a person or family: `_PRIM Y` at the link or at the file – the image other
+  programs show as the main picture (`primary` stays webtrees' own choice, the first image).
+- **Research tasks** (`Tasks`, `tasks` at Individual/Family) with `description` (DESC), `category` (_CAT), `priority`
+  (_PRTY 0–8), `taskType` (TYPE), `status` (STAT), `reminder` (_RDATE), `completed` (_CDATE), `solution` (DATA) and
+  `repository` (REPO, `{xref, name}`).
+- **Location record** (`Place` → `location`) with `names` (all NAME lines with date, language, abbreviation), `types`
+  (all TYPE lines with date and GOV type number), `postalCodes` (with date), `adminIds` (_AIDN with type, e.g. AGS),
+  `demographics` (_DMGD with type), `maidenhead`, `religion` and `uids`.
+- **Fix: changing a research task** (`POST Task` with `factId`) no longer drops what the route does not set itself.
+  Up to 1.20 the task was rewritten from text, date, user and note, and the GEDCOM-L items (DESC, _CAT, _PRTY, TYPE,
+  STAT, _CDATE, _RDATE, DATA, REPO, _UID) and source citations were lost.
+- **Test tree `gedcoml.ged`** with every item of the addendum; a test sends it through all write routes the apps use
+  (event, name, godparents, citation, task, media object, source, repository, place, rename) and checks that every
+  GEDCOM-L line survives.
+
 ## 1.20.0 – 2026-10-13
 **API level 33: address at events.** Additive.
 - **`address` at every fact** (Individual, Family, Export): the event's `2 ADDR` with its continuation lines (or `3 ADR1`

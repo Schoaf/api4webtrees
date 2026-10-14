@@ -227,6 +227,8 @@ trait JsonBuilders
             'marriage' => $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()),
             'facts'    => $this->factsJson($family),
             'children' => $children,
+            // Ab Stufe 34: 1 _UID der Familie
+            'uids'     => $this->uidsJson($family),
         ];
     }
 
@@ -305,6 +307,8 @@ trait JsonBuilders
                 'place'          => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
                 // Ab Stufe 33: Adresse am Ereignis (2 ADDR mit Fortsetzungen, sonst 3 ADR1), null ohne
                 'address'        => $this->factAddress($fact->gedcom()),
+                // Ab Stufe 34: GEDCOM-L-Angaben am Ort und an der Adresse, die sonst kein eigenes Feld haben
+                'extras'         => $this->gedcomLExtras($fact->gedcom()),
                 'notes'          => $notes,
                 'noteKinds'      => $kinds,
                 'sources'        => $this->factSources($fact, $tree),
@@ -321,6 +325,47 @@ trait JsonBuilders
         }
 
         return $data;
+    }
+
+    /**
+     * Ab Stufe 34: GEDCOM-L-Angaben (Addendum zu GEDCOM 5.5.1) an einem Ereignis, die kein eigenes Feld haben: am Ort die
+     * GOV-Kennung (3 _GOV), Postleitzahl (3 _POST, mit Datum) und der Maidenhead-Locator (3 _MAIDENHEAD), an der Adresse
+     * der Name des Empfaengers (3 _NAME). Der Verweis auf den Ortsdatensatz (3 _LOC) steckt schon in place.location.
+     *
+     * @return list<array{tag:string,value:string,date:string|null}>
+     */
+    private function gedcomLExtras(string $gedcom): array
+    {
+        $out = [];
+        foreach (['PLAC' => ['_GOV', '_POST', '_MAIDENHEAD'], 'ADDR' => ['_NAME']] as $parent => $tags) {
+            foreach (GedcomText::subrecords("\n" . $gedcom, 2, $parent) as [, $sub]) {
+                foreach ($tags as $tag) {
+                    foreach (GedcomText::subrecords($sub, 3, $tag) as [$value, $inner]) {
+                        if (trim($value) === '') {
+                            continue;
+                        }
+                        $date  = trim(GedcomText::subrecords($inner, 4, 'DATE')[0][0] ?? '');
+                        $out[] = ['tag' => $parent . ':' . $tag, 'value' => trim($value), 'date' => $date === '' ? null : $date];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ab Stufe 34: die eindeutigen Kennungen eines Datensatzes (1 _UID, GEDCOM-L/PAF) - Programme erkennen daran denselben
+     * Datensatz in zwei Dateien wieder.
+     *
+     * @return list<string>
+     */
+    private function uidsJson(GedcomRecord $record): array
+    {
+        return array_values(array_filter(array_map(
+            static fn (array $t): string => trim($t[0]),
+            GedcomText::subrecords("\n" . $record->gedcom(), 1, '_UID')
+        ), static fn (string $v): bool => $v !== ''));
     }
 
     /** Adresse eines Ereignisses: "2 ADDR" mit "3 CONT"-Zeilen; ohne Wert die Zeile "3 ADR1". Null, wenn keine. */
@@ -570,7 +615,10 @@ trait JsonBuilders
 
             foreach ($this->mediaFilesJson($media) as $file) {
                 // factId: die Verknuepfung (1 OBJE @M1@) - fuer UnlinkMedia und PrimaryMedia.
-                $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary];
+                // highlighted (ab Stufe 34): GEDCOM-L "_PRIM Y" am Verweis oder an der Datei - so markieren andere Programme
+                // das Bild, das sie als Hauptbild zeigen; webtrees selbst nimmt weiter das erste Bild (primary).
+                $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary,
+                    'highlighted' => strtoupper(trim($fact->attribute('_PRIM'))) === 'Y' || preg_match('/\n2 _PRIM Y\b/i', $media->gedcom()) === 1];
             }
         }
 

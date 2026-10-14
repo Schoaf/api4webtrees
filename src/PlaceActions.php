@@ -26,6 +26,7 @@ use Generator;
 use Throwable;
 
 use function abs;
+use function array_column;
 use function array_flip;
 use function array_key_exists;
 use function array_pad;
@@ -1620,6 +1621,47 @@ trait PlaceActions
             'media'   => $this->mediaWithInfo($location),
             'canEdit' => $location->canEdit(),
             'url'     => $location->url(),
+        ] + $this->locGedcomL($location);
+    }
+
+    /**
+     * Ab Stufe 34: die uebrigen Angaben eines Ortsdatensatzes nach dem GEDCOM-L-Addendum, jeweils mit Datum: alle Namen
+     * (NAME mit DATE, LANG, ABBR - der erste ist auch "name"), alle Arten (TYPE mit DATE, _GOVTYPE - die letzte ist auch
+     * "type"), Postleitzahlen (_POST mit DATE), amtliche Kennungen (_AIDN mit TYPE, z. B. AGS), Bevoelkerungsdaten
+     * (_DMGD mit TYPE), Maidenhead-Locator, Religion und eindeutige Kennungen (_UID).
+     *
+     * @return array<string,mixed>
+     */
+    private function locGedcomL(Location $location): array
+    {
+        $block = "\n" . $location->gedcom();
+        $teil  = static fn (string $sub, string $tag): string|null => trim(GedcomText::subrecords($sub, 2, $tag)[0][0] ?? '') ?: null;
+        $liste = function (string $tag, array $extra) use ($block, $teil): array {
+            $out = [];
+            foreach (GedcomText::subrecords($block, 1, $tag) as [$value, $sub]) {
+                if (trim($value) === '') {
+                    continue;
+                }
+                $eintrag = ['value' => trim($value), 'date' => $teil($sub, 'DATE')];
+                foreach ($extra as $key => $sub_tag) {
+                    $eintrag[$key] = $teil($sub, $sub_tag);
+                }
+                $out[] = $eintrag;
+            }
+
+            return $out;
+        };
+        $einzel = static fn (string $tag): string|null => trim(GedcomText::firstValue($location->gedcom(), 1, $tag)) ?: null;
+
+        return [
+            'names'        => $liste('NAME', ['lang' => 'LANG', 'abbr' => 'ABBR']),
+            'types'        => $liste('TYPE', ['govType' => '_GOVTYPE']),
+            'postalCodes'  => $liste('_POST', []),
+            'adminIds'     => $liste('_AIDN', ['type' => 'TYPE']),
+            'demographics' => $liste('_DMGD', ['type' => 'TYPE']),
+            'maidenhead'   => $einzel('_MAIDENHEAD'),
+            'religion'     => $einzel('RELI'),
+            'uids'         => array_column($liste('_UID', []), 'value'),
         ];
     }
 

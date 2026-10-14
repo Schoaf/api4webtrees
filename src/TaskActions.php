@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
@@ -160,6 +161,13 @@ trait TaskActions
             if ($this->shortTag($old->tag()) !== '_TODO') {
                 return $this->error(400, 'not-a-task');
             }
+            // Alles, was diese Route nicht selbst setzt, bleibt stehen: die GEDCOM-L-Angaben (DESC, _CAT, _PRTY, TYPE,
+            // STAT, _CDATE, _RDATE, DATA, REPO, _UID) und Quellen. Bis 1.20 schrieb die Route die Aufgabe ganz neu.
+            $rest = "\n" . (explode("\n", $old->gedcom(), 2)[1] ?? '');
+            foreach (['DATE', '_WT_USER', 'NOTE', 'CONT', 'CONC'] as $own) {
+                $rest = GedcomText::replaceSubrecords($rest, 2, $own, '');
+            }
+            $gedcom .= rtrim($rest);
             $record->updateFact($fact_id, $gedcom, true);
         } else {
             $record->createFact($gedcom, true);
@@ -280,6 +288,40 @@ trait TaskActions
         return response(['ok' => true, 'changes' => $out]);
     }
 
+    /**
+     * Ab Stufe 34: die Felder einer Forschungsaufgabe nach dem GEDCOM-L-Addendum - Beschreibung (DESC), Kategorie (_CAT),
+     * Prioritaet (_PRTY 0-8), Art (TYPE 0 Recherche, 1 Schriftverkehr, 2 Sonstiges), Status (STAT open/completed/auto),
+     * Erinnerung (_RDATE), erledigt am (_CDATE), Loesung (DATA) und Archiv (REPO). Fehlt eine Angabe: null.
+     *
+     * @return array<string,mixed>
+     */
+    private function taskGedcomL(Fact $fact): array
+    {
+        $wert = static fn (string $tag): string|null => trim($fact->attribute($tag)) === '' ? null : trim($fact->attribute($tag));
+        $datum = function (string $tag) use ($fact): array|null {
+            $raw = trim($fact->attribute($tag));
+
+            return $raw === '' ? null : $this->dateJson(new Date($raw), $raw);
+        };
+        $repo = null;
+        if (preg_match('/^@([^@]+)@$/', trim($fact->attribute('REPO')), $m) === 1) {
+            $target = Registry::repositoryFactory()->make($m[1], $fact->record()->tree());
+            $repo   = ['xref' => $m[1], 'name' => $target !== null && $target->canShow() ? $this->recordName($target) : null];
+        }
+
+        return [
+            'description' => $wert('DESC'),
+            'category'    => $wert('_CAT'),
+            'priority'    => $wert('_PRTY'),
+            'taskType'    => $wert('TYPE'),
+            'status'      => $wert('STAT'),
+            'reminder'    => $datum('_RDATE'),
+            'completed'   => $datum('_CDATE'),
+            'solution'    => $wert('DATA'),
+            'repository'  => $repo,
+        ];
+    }
+
     /** Eine Aufgabe als JSON: Datensatz, Text, Datum, Bearbeiter, Notiz. */
     private function taskJson(GedcomRecord $record, Fact $fact): array
     {
@@ -296,7 +338,7 @@ trait TaskActions
             'user'       => $fact->attribute('_WT_USER'),
             'note'       => $this->plainLines(str_replace("\n3 CONT ", "\n", $fact->attribute('NOTE'))),
             'pending'    => $fact->isPendingAddition(),
-        ];
+        ] + $this->taskGedcomL($fact);
     }
 
     /**

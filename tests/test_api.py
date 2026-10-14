@@ -696,6 +696,117 @@ class Zusammenfuehren(unittest.TestCase):
             adm.post("Reject", "testbaum", {})
 
 
+GEDCOML = ("_RUFNAME", "_UID", "_GOV", "_POST", "_MAIDENHEAD", "_NAME", "_GODP", "_ASSO", "_WITN", "_PRIM", "_TODO", "_CAT",
+           "_PRTY", "_CDATE", "_RDATE", "_STAT", "_LOC", "_AIDN", "_DMGD", "_GOVTYPE")
+GEDCOML_TABELLEN = {"I": ("wt_individuals", "i"), "F": ("wt_families", "f"), "S": ("wt_sources", "s"), "M": ("wt_media", "m")}
+
+
+def gedcoml_ged(xref):
+    """Der rohe Datensatz im Baum gedcoml (andere Baeume haben dieselben Kennungen)."""
+    baum = umgebung.sql("SELECT gedcom_id FROM wt_gedcom WHERE gedcom_name = 'gedcoml'")[0][0]
+    tabelle, p = GEDCOML_TABELLEN.get(xref[0], ("wt_other", "o"))
+    return umgebung.sql(f"SELECT {p}_gedcom FROM {tabelle} WHERE {p}_id = ? AND {p}_file = ?", xref, baum)[0][0]
+
+
+def gedcoml_pfade(gedcom):
+    """Jede Zeile mit einem GEDCOM-L-Tag oder unter einem: Pfad aus den Tags der Eltern plus eigene Zeile (ohne Ebene).
+    So bleibt der Vergleich gueltig, wenn sich Werte der Eltern aendern (anderes Datum am Ereignis, anderer Aufgabentext)."""
+    pfade, stapel = set(), []
+    for zeile in gedcom.split("\n"):
+        teile = zeile.split(" ", 2)
+        if len(teile) < 2 or not teile[0].isdigit():
+            continue
+        ebene, tag, wert = int(teile[0]), teile[1], teile[2] if len(teile) > 2 else ""
+        del stapel[ebene:]
+        stapel.append(tag)
+        if ebene > 0 and any(t in GEDCOML for t in stapel):
+            pfade.add("/".join(stapel[:-1]) + "|" + tag + " " + wert)
+    return pfade
+
+
+class GedcomL(unittest.TestCase):
+    """Stufe 34: alle Angaben des GEDCOM-L-Addendums lesen - und nichts davon verlieren, wenn die App schreibt."""
+
+    def test_a_lesen(self):
+        s = U.sitzung("admin")
+        p = s.get("Individual", "gedcoml", xref="I1").json
+        self.assertEqual(["2B7A6D3E1F904C5A8E1D2C3B4A5F6E7D8C9B"], p["uids"])
+        birt = next(f for f in p["facts"] if f["tag"] == "BIRT")
+        self.assertEqual([{"tag": "PLAC:_GOV", "value": "HOFNR3JO53PC", "date": None},
+                          {"tag": "PLAC:_POST", "value": "29553", "date": "FROM 1993"},
+                          {"tag": "PLAC:_MAIDENHEAD", "value": "JO53PC", "date": None},
+                          {"tag": "ADDR:_NAME", "value": "Familie Mohwinkel", "date": None}], birt["extras"])
+        self.assertEqual([], next(f for f in p["facts"] if f["tag"] == "OCCU")["extras"])
+        self.assertEqual(True, p["media"][0]["highlighted"])
+        aufgabe = p["tasks"][0]
+        self.assertEqual(("Taufeintrag im Kirchenbuch prüfen", "Kirchenbuch", "1", "0", "open", "Eintrag gefunden auf Seite 19"),
+                         (aufgabe["description"], aufgabe["category"], aufgabe["priority"], aufgabe["taskType"], aufgabe["status"], aufgabe["solution"]))
+        self.assertEqual(("R1", "Pfarramt Bienenbüttel"), (aufgabe["repository"]["xref"], aufgabe["repository"]["name"]))
+        self.assertEqual((2026, 2026), (aufgabe["completed"]["year"], aufgabe["reminder"]["year"]))
+        fam = s.get("Family", "gedcoml", xref="F1").json
+        self.assertEqual(["AAAABBBBCCCCDDDDEEEEFFFF00001111"], fam["uids"])
+        # _STAT kommt als Fakt mit uebersetztem Wert (wie webtrees ihn zeigt)
+        self.assertNotEqual("", next(f for f in fam["facts"] if f["tag"] == "_STAT")["value"])
+        self.assertEqual(("6", None), (fam["tasks"][0]["priority"], fam["tasks"][0]["description"]))
+        loc = s.get("Place", "gedcoml", name="Bienenbüttel").json["location"]
+        self.assertEqual([{"value": "Bienenbüttel", "date": "FROM 1900", "lang": None, "abbr": "Bbüttel"},
+                          {"value": "Bienenbuettel", "date": "BEF 1900", "lang": "German", "abbr": None}], loc["names"])
+        self.assertEqual([{"value": "Dorf", "date": "BEF 1972", "govType": "55"},
+                          {"value": "Gemeinde", "date": "FROM 1972", "govType": "54"}], loc["types"])
+        self.assertEqual(("Gemeinde", "54"), (loc["type"], loc["govType"]))
+        self.assertEqual([{"value": "03360004", "date": "FROM 1972", "type": "AGS"}], loc["adminIds"])
+        self.assertEqual(["1200", "6500"], [d["value"] for d in loc["demographics"]])
+        self.assertEqual([{"value": "29553", "date": "FROM 1993"}], loc["postalCodes"])
+        self.assertEqual(("JO53PC", "evangelisch-lutherisch", ["8888DDDD8888DDDD8888DDDD8888DDDD"]),
+                         (loc["maidenhead"], loc["religion"], loc["uids"]))
+        # Export traegt die Zusatzangaben ebenso
+        ex = next(i for i in s.get("Export", "gedcoml", page=1).json["individuals"] if i["xref"] == "I1")
+        self.assertEqual(4, len(next(f for f in ex["facts"] if f["tag"] == "BIRT")["extras"]))
+
+    def test_b_schreiben_verliert_nichts(self):
+        s = U.sitzung("admin")
+        xrefs = ["I1", "I2", "F1", "M1", "S1", "R1", "N1", "L1", "L2"]
+        vorher = {x: gedcoml_pfade(gedcoml_ged(x)) for x in xrefs}
+        self.assertGreater(sum(len(v) for v in vorher.values()), 60)
+        fakten = {f["tag"]: f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"]}
+        ok = lambda r: self.assertEqual(True, r.json.get("ok"), r)
+        # Ereignisse aendern: Datum, Beruf, Name
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["BIRT"]["id"], "tag": "BIRT", "date": "4 MAR 1850",
+                                      "place": "Hof Nr. 3, Bienenbüttel"}, xref="I1"))
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["OCCU"]["id"], "tag": "OCCU", "value": "Hofbauer"}, xref="I1"))
+        ok(s.post("Fact", "gedcoml", {"factId": fakten["NAME"]["id"], "value": "Johann Hinrich /Mohwinkel/"}, xref="I1"))
+        # Paten unveraendert zurueckschreiben, wie der Dialog es tut, wenn man nur speichert
+        bapm = next(f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"] if f["tag"] == "BAPM")
+        ok(s.post("Association", "gedcoml", {"factId": bapm["id"],
+            # wie der Paten-Dialog: rela nur bei "other", die Notiz nur, wenn sie geaendert wurde
+            "linked": [{"xref": a["xref"], "role": a["role"], **({"rela": a["rela"]} if a["role"] == "other" else {})} for a in bapm["associates"]],
+            "free": [{"text": a["text"], "role": a["role"]} for a in bapm["freeAssociates"]]}, xref="I1"))
+        # Quelle zitieren, Aufgabe aendern, Medium umbenennen
+        birt = next(f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"] if f["tag"] == "BIRT")
+        ok(s.post("Citation", "gedcoml", {"factId": birt["id"], "source": "S1", "page": "S. 19"}, xref="I1"))
+        aufgabe = s.get("Individual", "gedcoml", xref="I1").json["tasks"][0]
+        ok(s.post("Task", "gedcoml", {"factId": aufgabe["factId"], "text": "Taufeintrag und Paten prüfen", "date": "2 OCT 2026",
+                                      "note": "Pfarramt angeschrieben"}, xref="I1"))
+        ok(s.post("MediaObject", "gedcoml", {"title": "Hof Mohwinkel um 1900"}, xref="M1"))
+        # Familie: Heirat und Aufgabe
+        fam = s.get("Family", "gedcoml", xref="F1").json
+        marr = next(f for f in fam["facts"] if f["tag"] == "MARR")
+        ok(s.post("Fact", "gedcoml", {"factId": marr["id"], "tag": "MARR", "date": "12 MAY 1875", "place": "Bienenbüttel"}, xref="F1"))
+        ok(s.post("Task", "gedcoml", {"factId": fam["tasks"][0]["factId"], "text": "Heiratseintrag suchen (Standesamt)"}, xref="F1"))
+        # Quelle, Archiv, Orte
+        ok(s.post("Source", "gedcoml", {"author": "Pfarramt"}, xref="S1"))
+        ok(s.post("Repository", "gedcoml", {"name": "Pfarramt Bienenbüttel (Archiv)"}, xref="R1"))
+        ok(s.post("Place", "gedcoml", {"name": "Bienenbüttel", "lat": 53.15, "lng": 10.49, "type": "Samtgemeinde"}))
+        ok(s.post("Place", "gedcoml", {"name": "Hof Nr. 3, Bienenbüttel", "type": "Bauernhof"}))
+        # Umbenennen hin und zurueck
+        ok(s.post("PlaceRename", "gedcoml", {"from": "Hof Nr. 3, Bienenbüttel", "to": "Hof Nr. 3a, Bienenbüttel"}))
+        ok(s.post("PlaceRename", "gedcoml", {"from": "Hof Nr. 3a, Bienenbüttel", "to": "Hof Nr. 3, Bienenbüttel"}))
+        # Text, Datum und Notiz der Aufgaben hat der Test selbst geaendert
+        geaendert = re.compile(r"^@[^@]+@(\|_TODO |/_TODO\|(DATE|NOTE) )")
+        verloren = {x: sorted(p for p in vorher[x] - gedcoml_pfade(gedcoml_ged(x)) if not geaendert.match(p)) for x in xrefs}
+        self.assertEqual({x: [] for x in xrefs}, verloren)
+
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]
