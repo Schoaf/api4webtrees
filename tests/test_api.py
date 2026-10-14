@@ -840,6 +840,31 @@ class GedcomL(unittest.TestCase):
                          (t["status"], t["completed"]["year"], t["solution"], t["reminder"], t["category"], t["priority"]))
 
 
+class Zugang(unittest.TestCase):
+    """Stufe 36: wer ein Ereignis, eine Person, eine Familie sehen darf - fuer Buecher, die weitergegeben werden (Issue 21)."""
+
+    def test_zugang(self):
+        s = U.sitzung("admin")
+        i1 = s.get("Individual", "testbaum", xref="I1").json
+        self.assertEqual("visitor", i1["person"]["access"])
+        berufe = {f["value"]: f["access"] for f in i1["facts"] if f["tag"] == "OCCU"}
+        self.assertEqual({"Schmied": "visitor", "Markerberuf": "member"}, berufe)
+        # RESN locked sperrt nur das Bearbeiten, nicht das Ansehen
+        self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "RELI")["access"])
+        self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "NAME")["access"])
+        self.assertIn("OCCU", i1["person"]["restricted"])
+        self.assertEqual("manager", s.get("Individual", "testbaum", xref="I5").json["person"]["access"])
+        # I3 lebt; der Testbaum verbirgt Lebende vor Besuchern
+        self.assertEqual("member", s.get("Individual", "testbaum", xref="I3").json["person"]["access"])
+        # webtrees verbirgt eine Familie, sobald ein Mitglied privat ist: F1 hat das vertrauliche Kind I5
+        self.assertEqual("manager", s.get("Family", "testbaum", xref="F1").json["access"])
+        # F2 hat das lebende Kind I3: fuer Besucher verborgen, fuer Mitglieder sichtbar
+        self.assertEqual("member", s.get("Family", "testbaum", xref="F2").json["access"])
+        ex = s.get("Export", "testbaum", page=1).json
+        self.assertTrue(all("access" in f for f in ex["families"]))
+        self.assertIn("member", [f["access"] for f in next(i for i in ex["individuals"] if i["xref"] == "I1")["facts"] if f["tag"] == "OCCU"])
+
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]

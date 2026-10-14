@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Api4Webtrees;
 
+use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Elements\RelationIsDescriptor;
 use Fisharebest\Webtrees\Elements\UnknownElement;
@@ -115,6 +116,10 @@ trait JsonBuilders
             'sex'        => $this->sexCode($individual),
             'isDead'     => $individual->isDead(),
             'private'    => !$individual->canShow(),
+            // Ab Stufe 36: wer die Person sehen darf (visitor, member, manager) und welche ihrer Lebensdaten Besucher nicht
+            // sehen duerften - fuer Buecher zum Weitergeben ("nur, was Besucher sehen")
+            'access'     => $this->zugang($individual),
+            'restricted' => $this->eingeschraenkt($individual),
             'lifespan'   => $this->plain($individual->lifespan()),
             'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace()),
             'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace()),
@@ -227,6 +232,8 @@ trait JsonBuilders
             'marriage' => $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()),
             'facts'    => $this->factsJson($family),
             'children' => $children,
+            // Ab Stufe 36: wer die Familie sehen darf
+            'access'   => $this->zugang($family),
             // Ab Stufe 34: 1 _UID der Familie
             'uids'     => $this->uidsJson($family),
         ];
@@ -310,6 +317,8 @@ trait JsonBuilders
                 'place'          => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
                 // Ab Stufe 33: Adresse am Ereignis (2 ADDR mit Fortsetzungen, sonst 3 ADR1), null ohne
                 'address'        => $this->factAddress($fact->gedcom()),
+                // Ab Stufe 36: wer das Ereignis sehen darf - visitor, member oder manager (RESN, Datenschutzregeln des Baums)
+                'access'         => $this->zugang($fact),
                 // Ab Stufe 34: GEDCOM-L-Angaben am Ort und an der Adresse, die sonst kein eigenes Feld haben
                 'extras'         => $this->gedcomLExtras($fact->gedcom()),
                 'notes'          => $notes,
@@ -355,6 +364,41 @@ trait JsonBuilders
         }
 
         return $out;
+    }
+
+    /**
+     * Ab Stufe 36: die niedrigste Rolle, die einen Datensatz oder ein Ereignis sehen darf - "visitor" (Besucher), "member"
+     * (angemeldete Mitglieder) oder "manager" (Verwalter). webtrees entscheidet wie auf seinen Seiten: RESN, die
+     * Datenschutzregeln des Baums je Ereignisart und Person, bei Personen auch die Regeln fuer Lebende.
+     */
+    private function zugang(GedcomRecord|Fact $x): string
+    {
+        if ($x->canShow(Auth::PRIV_PRIVATE)) {
+            return 'visitor';
+        }
+
+        return $x->canShow(Auth::PRIV_USER) ? 'member' : 'manager';
+    }
+
+    /**
+     * Ab Stufe 36: die Lebensdaten einer Person (BIRT, CHR, BAPM, DEAT, BURI, CREM, OCCU), die Besucher nicht sehen
+     * duerften, obwohl die Person selbst fuer sie sichtbar ist. Leer, wenn alles oeffentlich ist.
+     *
+     * @return list<string>
+     */
+    private function eingeschraenkt(Individual $individual): array
+    {
+        if (!$individual->canShow(Auth::PRIV_PRIVATE)) {
+            return [];
+        }
+        $tags = [];
+        foreach ($individual->facts(['BIRT', 'CHR', 'BAPM', 'DEAT', 'BURI', 'CREM', 'OCCU']) as $fact) {
+            if (!$fact->canShow(Auth::PRIV_PRIVATE)) {
+                $tags[] = $this->shortTag($fact->tag());
+            }
+        }
+
+        return array_values(array_unique($tags));
     }
 
     /**

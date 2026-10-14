@@ -1023,6 +1023,8 @@ trait ReadActions
         return [
             'xref'     => $family->xref(),
             'private'  => !$visible,
+            // Ab Stufe 36: wer die Familie sehen darf
+            'access'   => $this->zugang($family),
             'husband'  => $family->husband()?->xref(),
             'wife'     => $family->wife()?->xref(),
             'children' => $family->children()->map(static fn (Individual $child): string => $child->xref())->values()->all(),
