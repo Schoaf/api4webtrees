@@ -35,6 +35,8 @@ $connectable = array_values(array_filter($apps, static fn (array $app): bool => 
     <?php endforeach ?>
 </p>
 
+<p class="text-muted small mt-3"><?= I18N::translate('Alle Apps auf dieser Seite sprechen mit diesem Server über das webtrees-Modul %s.', '<a href="https://github.com/thobgg/api4webtrees" target="_blank" rel="noopener">api4webtrees</a>') ?></p>
+
 <script>
   // Code, Baum und Benutzer stehen im URL-Fragment (#code=...): das Fragment erreicht nie den Server und damit
   // kein Zugriffsprotokoll. Hier wird daraus der App-Link gebaut - und das Fragment aus dem Browser-Verlauf entfernt.

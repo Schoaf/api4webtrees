@@ -223,6 +223,8 @@ $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static f
     <?php endif ?>
 <?php endforeach ?>
 
+<p class="text-muted small mt-4"><?= I18N::translate('Alle Apps auf dieser Seite sprechen mit diesem Server über das webtrees-Modul %s.', '<a href="https://github.com/thobgg/api4webtrees" target="_blank" rel="noopener">api4webtrees</a>') ?></p>
+
 <script>
   (function () {
     // Download: die neueste Datei aus dem GitHub-Release suchen (Dateinamen tragen die Version). Erst beim Klick, damit

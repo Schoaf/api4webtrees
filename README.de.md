@@ -163,8 +163,8 @@ JSON-Endpunkten, Rechten oder dem Datenschutz ist an eine App gebunden. Die Seit
 und die Fußzeile zeigen die Apps aus `src/Apps.php`. Eine App kommt per Pull Request mit einem Eintrag dazu: Name,
 Autor, Art (Handy oder PC), Geräte, Download-Adressen (https), das URL-Schema fürs Verbinden per Tipp, bei einem
 Store-Link das Badge unter `resources/img` und wahlweise das Logo der App unter `resources/img` (`icon`, quadratisches PNG
-oder SVG, steht auf den Seiten „App“ und „Verbinden“ vor dem Namen). Bedingung: Die App ist öffentlich installierbar (Store oder Release) und
-nimmt den Koppel-Link an. Die Tests weisen Einträge mit fehlenden Feldern, Links ohne https oder schon vergebenem Schema
+oder SVG, steht auf den Seiten „App“ und „Verbinden“ vor dem Namen). Bedingungen: Die App ist öffentlich installierbar (Store oder Release), nimmt den Koppel-Link an und nennt in ihrer
+Store-Beschreibung oder ihrem README, dass sie das Modul api4webtrees auf dem Server braucht, mit Link auf dieses Repository. Die Tests weisen Einträge mit fehlenden Feldern, Links ohne https oder schon vergebenem Schema
 ab. Verwalter können jede App in den Einstellungen abhaken. Der Vertrag fürs Koppeln ist der von wtAnd: Die Seiten
 „App“ und „Verbinden“ öffnen `<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>`
 in der App. Die App holt sich mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN`

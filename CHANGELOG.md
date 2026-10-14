@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.22.0 – 2026-10-14
+API level 36, unchanged. **webtrees mobile for Android** (Google Play), added by Andreas Scharf: the app is now listed
+for Android phones as well as for iPhone and iPad, with the Google Play badge. **The “App” and “Connect” pages name the
+module** with a link to the repository: all apps there talk to the server through api4webtrees. **A rule for entries in
+the apps list** (README, “Apps on the “App” page”): the store description or README of an app says that it needs the
+module on the server, with a link to the repository.
+
 ## 1.21.0 – 2026-10-14
 **API levels 34 to 36: the GEDCOM-L addendum, read completely, three parts of it writable – and nothing of it lost when
 writing; who may see each fact.** Additive.

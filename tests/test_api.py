@@ -1372,6 +1372,7 @@ class Schreiben(unittest.TestCase):
         self.assertIn("App und Schnittstelle werden gemeinsam entwickelt", android)
         self.assertLess(android.index("wtWin"), android.index("wtTux"))
         self.assertIn("webtreesand://connect?", android)
+        self.assertIn("github.com/thobgg/api4webtrees", android)
         self.assertNotIn("noch kein eigenes Programm", android)
 
         windows = seite("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
@@ -1398,6 +1399,7 @@ class Schreiben(unittest.TestCase):
         self.assertIn("wt-apps.png", verbinden)
         self.assertIn("wtAnd herunterladen", verbinden)
         self.assertNotIn("wtWin", verbinden)
+        self.assertIn("github.com/thobgg/api4webtrees", verbinden)
 
     def test_app_abschalten(self):
         """Einstellungen: eine abgehakte App verschwindet von der Seite App und aus der Fusszeile."""
