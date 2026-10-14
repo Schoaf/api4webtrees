@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.0 – 2026-10-14
 **API levels 34 to 36: the GEDCOM-L addendum, read completely, three parts of it writable – and nothing of it lost when
 writing; who may see each fact.** Additive.
 - **Level 36 – `access`** at every fact, person (Individual, Export, all person summaries) and family: the lowest role
