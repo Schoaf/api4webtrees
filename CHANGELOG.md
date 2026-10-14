@@ -7,7 +7,7 @@ writing; who may see each fact.** Additive.
   that may see it – `visitor`, `member` or `manager` – decided by webtrees itself (RESN, the tree's privacy rules per fact
   type and person, the rules for living people; a family is hidden as soon as one member is). Person summaries also get
   `restricted`: the life events (BIRT, CHR, BAPM, DEAT, BURI, CREM, OCCU) a visitor would not see although the person
-  itself is visible. Clients can thus produce books for a wider audience from a manager's login (issue 21 of the apps).
+  itself is visible; linked godparents and witnesses (`associates`) carry `access` too. Clients can thus produce books for a wider audience from a manager's login (issue 21 of the apps).
 - **Level 35 – `gedcomValue`** at every fact: the value as stored in GEDCOM when `value` shows it translated
   (`1 _STAT NOT MARRIED` → “not married”), else `null`. Clients need it to write the value back; the family status is
   written with the existing `POST Fact`.

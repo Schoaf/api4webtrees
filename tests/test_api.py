@@ -854,6 +854,9 @@ class Zugang(unittest.TestCase):
         self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "RELI")["access"])
         self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "NAME")["access"])
         self.assertIn("OCCU", i1["person"]["restricted"])
+        # Paten tragen ihre Sichtbarkeit: an der Taufe von I1 ist der lebende I3 Pate, I5 vertraulich
+        paten = {a["xref"]: a["access"] for f in i1["facts"] if f["tag"] == "CHR" for a in f["associates"]}
+        self.assertEqual(("member", "manager"), (paten["I3"], paten["I5"]))
         self.assertEqual("manager", s.get("Individual", "testbaum", xref="I5").json["person"]["access"])
         # I3 lebt; der Testbaum verbirgt Lebende vor Besuchern
         self.assertEqual("member", s.get("Individual", "testbaum", xref="I3").json["person"]["access"])

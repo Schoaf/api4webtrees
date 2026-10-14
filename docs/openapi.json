@@ -700,6 +700,9 @@
               "items": {
                "type": "object",
                "properties": {
+                "access": {
+                 "type": "string"
+                },
                 "label": {
                  "type": "string"
                 },
@@ -783,6 +786,7 @@
                 }
                },
                "required": [
+                "access",
                 "label",
                 "level1",
                 "name",
@@ -1434,6 +1438,9 @@
                  "items": {
                   "type": "object",
                   "properties": {
+                   "access": {
+                    "type": "string"
+                   },
                    "label": {
                     "type": "string"
                    },
@@ -1468,6 +1475,7 @@
                    }
                   },
                   "required": [
+                   "access",
                    "label",
                    "level1",
                    "name",
@@ -2712,6 +2720,9 @@
                  "items": {
                   "type": "object",
                   "properties": {
+                   "access": {
+                    "type": "string"
+                   },
                    "label": {
                     "type": "string"
                    },
@@ -2746,6 +2757,7 @@
                    }
                   },
                   "required": [
+                   "access",
                    "label",
                    "level1",
                    "name",
@@ -4398,6 +4410,9 @@
               "items": {
                "type": "object",
                "properties": {
+                "access": {
+                 "type": "string"
+                },
                 "label": {
                  "type": "string"
                 },
@@ -4432,6 +4447,7 @@
                 }
                },
                "required": [
+                "access",
                 "label",
                 "level1",
                 "name",
@@ -7201,6 +7217,9 @@
                  "items": {
                   "type": "object",
                   "properties": {
+                   "access": {
+                    "type": "string"
+                   },
                    "label": {
                     "type": "string"
                    },
@@ -7235,6 +7254,7 @@
                    }
                   },
                   "required": [
+                   "access",
                    "label",
                    "level1",
                    "name",
@@ -7692,6 +7712,9 @@
                  "items": {
                   "type": "object",
                   "properties": {
+                   "access": {
+                    "type": "string"
+                   },
                    "label": {
                     "type": "string"
                    },
@@ -7775,6 +7798,7 @@
                    }
                   },
                   "required": [
+                   "access",
                    "label",
                    "level1",
                    "name",

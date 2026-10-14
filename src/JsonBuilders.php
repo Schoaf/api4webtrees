@@ -526,6 +526,8 @@ trait JsonBuilders
             'role'    => $role,
             'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $this->sexCode($individual)),
             'private' => $private,
+            // Ab Stufe 36: wer den Paten/Zeugen sehen darf (ein lebender Pate gehoert nicht in ein Buch fuer Besucher)
+            'access'  => $this->zugang($individual),
             'level1'  => $level1,
             'notes'   => $this->notesFromBlock($sub, $sub_level, $tree),
             'sources' => $this->sourcesFromBlock($sub, $sub_level, $tree),
