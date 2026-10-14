@@ -1418,7 +1418,17 @@ trait WriteActions
 
         $first = $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->first();
 
-        if ($first === $links[0]) {
+        // Ab Stufe 35 auch nach GEDCOM-L: "2 _PRIM Y" an diesem Verweis, an den anderen Verweisen faellt _PRIM weg -
+        // so zeigen andere Programme dasselbe Hauptbild wie webtrees (das erste Bild).
+        $prim = static function (Fact $fact, bool $hauptbild): string {
+            $gedcom = GedcomText::replaceSubrecords("\n" . $fact->gedcom(), 2, '_PRIM', $hauptbild ? "\n2 _PRIM Y" : '');
+
+            return substr($gedcom, 1);
+        };
+        $schon = $first === $links[0] && strtoupper(trim($links[0]->attribute('_PRIM'))) === 'Y'
+            && $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->filter(static fn (Fact $f): bool => $f !== $links[0] && $f->attribute('_PRIM') !== '')->isEmpty();
+
+        if ($schon) {
             return $this->written($record);
         }
 
@@ -1426,11 +1436,11 @@ trait WriteActions
 
         foreach ($record->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
             if ($fact === $first) {
-                $lines[] = $links[0]->gedcom();
+                $lines[] = $prim($links[0], true);
             }
 
             if ($fact !== $links[0]) {
-                $lines[] = $fact->gedcom();
+                $lines[] = $fact->tag() === $record->tag() . ':OBJE' ? $prim($fact, false) : $fact->gedcom();
             }
         }
 

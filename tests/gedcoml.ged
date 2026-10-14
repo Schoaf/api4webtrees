@@ -43,6 +43,7 @@
 2 _WITN Hinnerk Meyer
 1 OBJE @M1@
 2 _PRIM Y
+1 OBJE @M2@
 1 _TODO Taufeintrag prüfen
 2 DESC Taufeintrag im Kirchenbuch prüfen
 2 _CAT Kirchenbuch
@@ -84,6 +85,11 @@
 2 TITL Hof Mohwinkel
 2 _PRIM Y
 1 _UID 1234ABCD1234ABCD1234ABCD1234ABCD
+0 @M2@ OBJE
+1 FILE scheune.jpg
+2 FORM jpg
+3 TYPE photo
+2 TITL Scheune
 0 @S1@ SOUR
 1 TITL Kirchenbuch Bienenbüttel
 1 _UID 5555AAAA5555AAAA5555AAAA5555AAAA

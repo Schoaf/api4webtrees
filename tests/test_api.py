@@ -765,7 +765,7 @@ class GedcomL(unittest.TestCase):
 
     def test_b_schreiben_verliert_nichts(self):
         s = U.sitzung("admin")
-        xrefs = ["I1", "I2", "F1", "M1", "S1", "R1", "N1", "L1", "L2"]
+        xrefs = ["I1", "I2", "F1", "M1", "M2", "S1", "R1", "N1", "L1", "L2"]
         vorher = {x: gedcoml_pfade(gedcoml_ged(x)) for x in xrefs}
         self.assertGreater(sum(len(v) for v in vorher.values()), 60)
         fakten = {f["tag"]: f for f in s.get("Individual", "gedcoml", xref="I1").json["facts"]}
@@ -805,6 +805,39 @@ class GedcomL(unittest.TestCase):
         geaendert = re.compile(r"^@[^@]+@(\|_TODO |/_TODO\|(DATE|NOTE) )")
         verloren = {x: sorted(p for p in vorher[x] - gedcoml_pfade(gedcoml_ged(x)) if not geaendert.match(p)) for x in xrefs}
         self.assertEqual({x: [] for x in xrefs}, verloren)
+
+    def test_c_schreiben_stufe35(self):
+        """Stufe 35: Familienstand ueber Fact (roher Wert in gedcomValue), Hauptbild mit _PRIM, Aufgabenfelder."""
+        s = U.sitzung("admin")
+        ok = lambda r: self.assertEqual(True, r.json.get("ok"), r)
+        stat = next(f for f in s.get("Family", "gedcoml", xref="F1").json["facts"] if f["tag"] == "_STAT")
+        self.assertEqual("NOT MARRIED", stat["gedcomValue"])
+        ok(s.post("Fact", "gedcoml", {"factId": stat["id"], "value": "NEVER MARRIED"}, xref="F1"))
+        self.assertIn("\n1 _STAT NEVER MARRIED", gedcoml_ged("F1"))
+        self.assertIsNone(next(f for f in s.get("Family", "gedcoml", xref="F1").json["facts"] if f["tag"] == "MARR")["gedcomValue"])
+        # Hauptbild: zweites Medium anlegen und zum Hauptbild machen - _PRIM wandert mit
+        medien = s.get("Individual", "gedcoml", xref="I1").json["media"]
+        self.assertEqual([("M1", True), ("M2", False)], [(m["xref"], m["highlighted"]) for m in medien])
+        zweit = next(m for m in medien if m["xref"] == "M2")
+        ok(s.post("PrimaryMedia", "gedcoml", {"media": zweit["xref"]}, xref="I1"))
+        g = gedcoml_ged("I1")
+        self.assertIn("1 OBJE @" + zweit["xref"] + "@\n2 _PRIM Y", g)
+        self.assertNotIn("1 OBJE @M1@\n2 _PRIM Y", g)
+        medien = s.get("Individual", "gedcoml", xref="I1").json["media"]
+        self.assertEqual([("M2", True), ("M1", True)], [(m["xref"], m["highlighted"]) for m in medien])  # M1 traegt _PRIM noch an der Datei
+        # Aufgabe mit allen Feldern anlegen, dann nur den Status aendern
+        a = s.post("Task", "gedcoml", {"text": "Grabstein fotografieren", "description": "Friedhof Bienenbüttel\nzweite Reihe",
+            "category": "Friedhof", "priority": "3", "taskType": "2", "status": "open", "reminder": "1 MAY 2027", "repository": "R1"}, xref="I2").json
+        self.assertEqual(True, a.get("ok"), a)
+        g = gedcoml_ged("I2")
+        for zeile in ("2 DESC Friedhof Bienenbüttel\n3 CONT zweite Reihe", "2 _CAT Friedhof", "2 _PRTY 3", "2 TYPE 2", "2 STAT open", "2 _RDATE 1 MAY 2027", "2 REPO @R1@"):
+            self.assertIn(zeile, g)
+        t = s.get("Individual", "gedcoml", xref="I2").json["tasks"][0]
+        ok(s.post("Task", "gedcoml", {"factId": t["factId"], "text": t["text"], "status": "completed", "completed": "2 MAY 2027",
+                                      "solution": "Foto im Archiv", "reminder": ""}, xref="I2"))
+        t = s.get("Individual", "gedcoml", xref="I2").json["tasks"][0]
+        self.assertEqual(("completed", 2027, "Foto im Archiv", None, "Friedhof", "3"),
+                         (t["status"], t["completed"]["year"], t["solution"], t["reminder"], t["category"], t["priority"]))
 
 
 class Schreiben(unittest.TestCase):

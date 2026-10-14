@@ -299,6 +299,9 @@ trait JsonBuilders
                 // Clients koennen solche Zeilen ausblenden; in webtrees selbst bleiben sie unveraendert erhalten.
                 'known'          => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
                 'value'          => $this->factValue($fact, $tree),
+                // Ab Stufe 35: der Wert, wie er im GEDCOM steht, wenn value ihn uebersetzt zeigt (1 _STAT NOT MARRIED ->
+                // "unverheiratet") - Clients brauchen ihn, um den Wert wieder zu schreiben. Sonst null.
+                'gedcomValue'    => $fact->value() !== $this->factValue($fact, $tree) ? $fact->value() : null,
                 'type'           => $type,
                 // TYPE so, wie webtrees ihn anzeigt (FAM:MARR:TYPE: civil -> "Standesamtliche Heirat"); unbekannte
                 // Werte bleiben roh, ohne TYPE null.

@@ -168,8 +168,10 @@ trait TaskActions
                 $rest = GedcomText::replaceSubrecords($rest, 2, $own, '');
             }
             $gedcom .= rtrim($rest);
+            $gedcom = $this->taskFelder($gedcom, $body);
             $record->updateFact($fact_id, $gedcom, true);
         } else {
+            $gedcom = $this->taskFelder($gedcom, $body);
             $record->createFact($gedcom, true);
         }
 
@@ -286,6 +288,32 @@ trait TaskActions
         }
 
         return response(['ok' => true, 'changes' => $out]);
+    }
+
+    /**
+     * Ab Stufe 35: die GEDCOM-L-Felder einer Aufgabe schreiben. Nur, was im Rumpf steht, aendert sich; leer entfernt die
+     * Zeile. Prioritaet 0-8, Art 0-2, Status open/completed/auto, Termine als GEDCOM-Datum, Archiv als Kennung.
+     *
+     * @param array<string,mixed> $body
+     */
+    private function taskFelder(string $gedcom, array $body): string
+    {
+        $felder = ['description' => 'DESC', 'category' => '_CAT', 'priority' => '_PRTY', 'taskType' => 'TYPE', 'status' => 'STAT',
+            'reminder' => '_RDATE', 'completed' => '_CDATE', 'solution' => 'DATA', 'repository' => 'REPO'];
+        $block = "\n" . $gedcom;
+        foreach ($felder as $key => $tag) {
+            if (!array_key_exists($key, $body)) {
+                continue;
+            }
+            $wert = trim(str_replace("\r", '', $this->str($body, $key)));
+            if ($key === 'repository' && $wert !== '') {
+                $wert = '@' . trim($wert, '@') . '@';
+            }
+            $neu   = $wert === '' ? '' : "\n2 " . $tag . ' ' . ($key === 'solution' || $key === 'description' ? GedcomText::multiline($wert, 3) : GedcomText::line($wert));
+            $block = GedcomText::replaceSubrecords($block, 2, $tag, $neu);
+        }
+
+        return substr($block, 1);
     }
 
     /**

@@ -1,7 +1,16 @@
 # Changelog
 
 ## Unreleased
-**API level 34: the GEDCOM-L addendum, read completely – and nothing of it lost when writing.** Additive.
+**API levels 34 and 35: the GEDCOM-L addendum, read completely, three parts of it writable – and nothing of it lost when
+writing.** Additive.
+- **Level 35 – `gedcomValue`** at every fact: the value as stored in GEDCOM when `value` shows it translated
+  (`1 _STAT NOT MARRIED` → “not married”), else `null`. Clients need it to write the value back; the family status is
+  written with the existing `POST Fact`.
+- **Level 35 – `POST PrimaryMedia`** also sets the GEDCOM-L mark `2 _PRIM Y` at the chosen media link and removes `_PRIM`
+  from the other links, so other programs show the same main picture as webtrees.
+- **Level 35 – `POST Task`** takes the GEDCOM-L fields `description`, `category`, `priority` (0–8), `taskType` (0–2),
+  `status` (open/completed/auto), `reminder`, `completed` (GEDCOM dates), `solution` and `repository` (xref). Only the
+  keys sent change; an empty value removes the line.
 - **`extras` at every fact** (Individual, Family, Export): the GEDCOM-L items that have no field of their own – at the
   place the GOV identifier (`PLAC:_GOV`), postal code (`PLAC:_POST`, with date) and Maidenhead locator
   (`PLAC:_MAIDENHEAD`), at the address the name of the addressee (`ADDR:_NAME`). Each as `{tag, value, date}`.
