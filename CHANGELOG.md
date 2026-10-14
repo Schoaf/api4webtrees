@@ -6,6 +6,7 @@ writing; who may see each fact.** Additive.
 - **Level 36 – `access`** at every fact, person (Individual, Export, all person summaries) and family: the lowest role
   that may see it – `visitor`, `member` or `manager` – decided by webtrees itself (RESN, the tree's privacy rules per fact
   type and person, the rules for living people; a family is hidden as soon as one member is). Person summaries also get
+  `nameAccess` (who may see the name – for living people this follows the tree setting “show living names”) and
   `restricted`: the life events (BIRT, CHR, BAPM, DEAT, BURI, CREM, OCCU) a visitor would not see although the person
   itself is visible; linked godparents and witnesses (`associates`) carry `access` too. Clients can thus produce books for a wider audience from a manager's login (issue 21 of the apps).
 - **Level 35 – `gedcomValue`** at every fact: the value as stored in GEDCOM when `value` shows it translated

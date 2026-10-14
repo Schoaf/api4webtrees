@@ -119,6 +119,8 @@ trait JsonBuilders
             // Ab Stufe 36: wer die Person sehen darf (visitor, member, manager) und welche ihrer Lebensdaten Besucher nicht
             // sehen duerften - fuer Buecher zum Weitergeben ("nur, was Besucher sehen")
             'access'     => $this->zugang($individual),
+            // wer den Namen sehen darf - bei Lebenden haengt das an der Baumeinstellung "Namen Lebender zeigen"
+            'nameAccess' => $individual->canShowName(Auth::PRIV_PRIVATE) ? 'visitor' : ($individual->canShowName(Auth::PRIV_USER) ? 'member' : 'manager'),
             'restricted' => $this->eingeschraenkt($individual),
             'lifespan'   => $this->plain($individual->lifespan()),
             'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace()),

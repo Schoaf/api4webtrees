@@ -859,7 +859,9 @@ class Zugang(unittest.TestCase):
         self.assertEqual(("member", "manager"), (paten["I3"], paten["I5"]))
         self.assertEqual("manager", s.get("Individual", "testbaum", xref="I5").json["person"]["access"])
         # I3 lebt; der Testbaum verbirgt Lebende vor Besuchern
-        self.assertEqual("member", s.get("Individual", "testbaum", xref="I3").json["person"]["access"])
+        lebend = s.get("Individual", "testbaum", xref="I3").json["person"]
+        self.assertEqual(("member", "member"), (lebend["access"], lebend["nameAccess"]))
+        self.assertEqual("visitor", i1["person"]["nameAccess"])
         # webtrees verbirgt eine Familie, sobald ein Mitglied privat ist: F1 hat das vertrauliche Kind I5
         self.assertEqual("manager", s.get("Family", "testbaum", xref="F1").json["access"])
         # F2 hat das lebende Kind I3: fuer Besucher verborgen, fuer Mitglieder sichtbar
