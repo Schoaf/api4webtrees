@@ -848,7 +848,8 @@ class Zugang(unittest.TestCase):
         i1 = s.get("Individual", "testbaum", xref="I1").json
         self.assertEqual("visitor", i1["person"]["access"])
         berufe = {f["value"]: f["access"] for f in i1["facts"] if f["tag"] == "OCCU"}
-        self.assertEqual({"Schmied": "visitor", "Markerberuf": "member"}, berufe)
+        # andere Tests legen weitere Berufe an I1 an - geprueft werden die beiden aus dem Testbaum
+        self.assertEqual(("visitor", "member"), (berufe["Schmied"], berufe["Markerberuf"]))
         # RESN locked sperrt nur das Bearbeiten, nicht das Ansehen
         self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "RELI")["access"])
         self.assertEqual("visitor", next(f for f in i1["facts"] if f["tag"] == "NAME")["access"])
