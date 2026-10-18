@@ -62,6 +62,9 @@ trait JsonBuilders
         'GIVN', 'SURN', 'NPFX', 'SPFX', 'NSFX', 'NICK', '_RUFNAME',
     ];
 
+    // Unter "1 ASSO": die Beziehung steht schon in associates
+    private const array ASSOCIATE_FIELDS = ['RELA', 'ROLE'];
+
     /**
      * Das Geschlecht (M, F, X oder U), wie der Benutzer es in den Fakten sieht (ab Stufe 28). webtrees' sex() nimmt den
      * ersten "1 SEX" - bei einer ausstehenden Aenderung ist das noch der freigegebene Wert, waehrend facts() dem
@@ -1155,9 +1158,15 @@ trait JsonBuilders
             }
         }
 
-        $rows  = [];
-        $stack = explode(':', $fact->tag());
-        $skip  = null;
+        // Ein Quellenverweis steht schon in sources, die Beziehung einer verknuepften Person in associates
+        if ($this->shortTag($fact->tag()) === 'SOUR') {
+            return [];
+        }
+
+        $covered = $this->shortTag($fact->tag()) === 'ASSO' ? [...self::DETAIL_FIELDS, ...self::ASSOCIATE_FIELDS] : self::DETAIL_FIELDS;
+        $rows    = [];
+        $stack   = explode(':', $fact->tag());
+        $skip    = null;
 
         foreach ($lines as [$level, $tag, $value]) {
             if ($skip !== null && $level > $skip) {
@@ -1167,7 +1176,7 @@ trait JsonBuilders
             $skip  = null;
             $stack = [...array_slice($stack, 0, $level), $tag];
 
-            if ($level === 2 && in_array($tag, self::DETAIL_FIELDS, true) || $tag === 'CHAN') {
+            if ($level === 2 && in_array($tag, $covered, true) || $tag === 'CHAN') {
                 $skip = $level;
                 continue;
             }
