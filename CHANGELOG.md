@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+API level 37. **`details` at every fact:** the sub-structures without a field of their own – age, cause, agency, phone,
+e-mail, web address, pedigree, transliterations, LDS status … – as rows with label and value as webtrees shows them, in
+the language of the request. A client shows them without reading GEDCOM, including ones it does not know. **Unknown
+names** in `sortName` are `…` as in webtrees, no longer `@N.N.`/`@P.N.`.
+
 ## 1.22.0 – 2026-10-14
 API level 36, unchanged. **webtrees mobile for Android** (Google Play), added by Andreas Scharf: the app is now listed
 for Android phones as well as for iPhone and iPad, with the Google Play badge. **The “App” and “Connect” pages name the

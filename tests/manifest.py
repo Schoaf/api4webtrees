@@ -41,7 +41,10 @@ ROUTEN = [
      "request – show them as HTML only after sanitising. From level 31 each tree also has `availableModules`: the names "
      "of the enabled modules this user can use there (modules with an access level – menus, tabs, footers … – only when "
      "it allows the user), so a client can offer e.g. the privacy policy only when that module is on. This makes `Info` "
-     "longer by one list of module names per tree.", [], None),
+     "longer by one list of module names per tree. From level 37 every fact has `details`: the sub-structures without a "
+     "field of their own (age, cause, phone, e-mail, pedigree, transliterations …) as rows `{tag, label, value, level}`, "
+     "with label and value as webtrees shows them in the language of the request – a client can show any of them "
+     "without reading GEDCOM. `sortName` shows unknown names as `…` instead of `@N.N.`/`@P.N.`.", [], None),
     ("get", "Individuals", True, 1, "visitor",
      "List of individuals, sorted by name, 50 per page. `q` filters by name; with `scope=all` the words may appear "
      "anywhere in the visible data (place, year, occupation …).",
