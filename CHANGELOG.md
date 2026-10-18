@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.0 – 2026-10-18
 API level 37. **`details` at every fact:** the sub-structures without a field of their own – age, cause, agency, phone,
 e-mail, web address, pedigree, transliterations, LDS status … – as rows with label and value as webtrees shows them, in
 the language of the request. A client shows them without reading GEDCOM, including ones it does not know. **Unknown
