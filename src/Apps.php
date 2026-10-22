@@ -110,7 +110,7 @@ final class Apps
             'scheme'   => 'webtreesmobile',
             'download' => ['android' => 'https://play.google.com/store/apps/details?id=net.webtrees.webtreesmobile', 'ios' => 'https://apps.apple.com/app/id6815108154'],
             'badge'    => ['android' => 'google-play.png', 'ios' => 'app-store.svg'],
-            'icon'     => '',
+            'icon'     => 'webtrees-mobile.png',
             'asset'    => '',
             'always'   => false,
         ],
