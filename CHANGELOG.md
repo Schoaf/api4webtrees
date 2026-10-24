@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+**API level 38. Crop of a media link** (GEDCOM 7 `2 CROP` with `TOP`, `LEFT`, `HEIGHT`, `WIDTH` in pixels): the part of
+an image that shows one person – each linked person can have their own part of the same group photo, the file stays
+unchanged. `Individual` gives each media entry `crop` (`{top, left, height, width}` or `null`); the new `POST MediaCrop`
+sets or removes it and links the media object first if needed. webtrees itself does not use CROP yet; clients can show
+the part (e.g. as the person's photo) or mark the persons on the photo.
+
 ## 1.23.0 – 2026-10-18
 API level 37. **`details` at every fact:** the sub-structures without a field of their own – age, cause, agency, phone,
 e-mail, web address, pedigree, transliterations, LDS status … – as rows with label and value as webtrees shows them, in
