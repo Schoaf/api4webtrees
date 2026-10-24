@@ -9,7 +9,10 @@ the part (e.g. as the person's photo) or mark the persons on the photo. **Level 
 person's link to their main photo has a crop, every `thumb` of that person points to the new `GET Portrait` – the image
 itself, a square thumbnail of the crop (cached; not when webtrees adds a watermark for the user). Clients show the right
 part in lists, trees and charts without doing anything. **Level 40 – `GET MediaObject`:** one media object with its
-files and everyone linked to it, each with the crop of their link – who is marked where on a photo.
+files and everyone linked to it, each with the crop of their link – who is marked where on a photo. **CROP is a known tag:** the
+module registers `INDI:OBJE:CROP` and `FAM:OBJE:CROP` with `TOP`, `LEFT`, `HEIGHT`, `WIDTH` as custom tags, as webtrees does
+for other GEDCOM 7 tags – the edit form no longer marks them red as unknown. (“Check for errors” checks against standard
+GEDCOM only and still lists them, as it does webtrees' own GEDCOM 7 tags.)
 
 ## 1.23.0 – 2026-10-18
 API level 37. **`details` at every fact:** the sub-structures without a field of their own – age, cause, agency, phone,

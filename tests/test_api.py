@@ -870,6 +870,12 @@ class Ausschnitt(unittest.TestCase):
             r = s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": falsch}, xref="I2")
             self.assertEqual((400, "invalid-crop"), (r.json.get("status"), r.json.get("error")), falsch)
         self.assertEqual("media-not-found", s.post("MediaCrop", "gedcoml", {"media": "M99", "crop": None}, xref="I2").json.get("error"))
+        # webtrees kennt CROP als Tag des Moduls: das Bearbeitungsformular markiert es nicht als unbekannt (rot)
+        fakt = next(m for m in s.get("Individual", "gedcoml", xref="I2").json["media"] if m["xref"] == "M1")["factId"]
+        with s.oeffner.open(s.url(f"/tree/gedcoml/edit-fact/I2/{fakt}"), timeout=60) as r:
+            formular = r.read().decode("utf-8", "replace")
+        self.assertIn("CROP", formular)
+        self.assertNotIn('<span class="error"', formular)
         # null entfernt den Ausschnitt, die Verknuepfung bleibt
         self.assertEqual(True, s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": None}, xref="I2").json.get("ok"))
         self.assertNotIn("CROP", gedcoml_ged("I2"))
