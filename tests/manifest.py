@@ -215,6 +215,11 @@ ROUTEN = [
      "`multipart/form-data`: `file`, `title?`, `note?`"),
     ("post", "UnlinkMedia", True, 8, "editor", "Unlink a media object; object and file stay.", [XREF], "`{media}`"),
     ("post", "PrimaryMedia", True, 8, "editor", "Make a linked image the main photo.", [XREF], "`{media}`"),
+    ("get", "MediaObject", True, 40, "visitor",
+     "One media object with its files and everyone linked to it – each visible individual with `factId` and `crop` of "
+     "their link (GEDCOM 7 `2 CROP`, `{top, left, height, width}` in pixels, or `null`): who is marked where on a photo. "
+     "`canEdit` tells whether the user may change the media object.",
+     [P("xref", "Media object identifier, e.g. `M45`", pflicht=True)], None),
     ("get", "Portrait", True, 39, "visitor",
      "The main photo of an individual as a square thumbnail of their crop (`2 CROP` at their link to it) – the image itself, "
      "not JSON. `thumb` points here whenever that link has a crop (not when webtrees adds a watermark for the user); `crop` "
@@ -431,6 +436,8 @@ def sammeln(u):
                                                                       ("Individual", "testbaum", {"xref": "I1", "relativeTo": "I3"})]:
             merken("get", aktion, s.get(aktion, b, **params))
 
+    for benutzer in (None, "mitglied", "bearbeiter", "admin"):
+        merken("get", "MediaObject", u.sitzung(benutzer).get("MediaObject", "testbaum", xref=m))
     merken("post", "MediaCrop", admin.post("MediaCrop", "testbaum", {"media": m, "crop": {"top": 0, "left": 0, "height": 1, "width": 1}}, xref="I1"))
     merken("post", "UnlinkMedia", admin.post("UnlinkMedia", "testbaum", {"media": m}, xref="I1"))
     merken("post", "Reject", admin.post("Reject", "testbaum", {}, xref="I2"))
