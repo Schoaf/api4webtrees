@@ -1397,6 +1397,70 @@ trait WriteActions
     }
 
     /**
+     * Ausschnitt eines Medienverweises setzen: ?xref=I123   Rumpf: { media: "M45", crop: {top, left, height, width} | null }
+     * GEDCOM 7 "2 CROP" am Verweis (Pixel) - jede verknuepfte Person bekommt so ihren eigenen Ausschnitt desselben Bildes,
+     * die Datei bleibt unveraendert. Ist das Medium noch nicht verknuepft, wird es mit dem Ausschnitt verknuepft;
+     * crop null entfernt den Ausschnitt.
+     */
+    public function postMediaCropAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $record = Registry::gedcomRecordFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyEdit($record);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $body       = $this->body($request);
+        $media_xref = trim($this->str($body, 'media'), '@');
+        $media      = Registry::mediaFactory()->make($media_xref, $tree);
+
+        if ($media === null || !$media->canShow()) {
+            return $this->error(404, 'media-not-found');
+        }
+
+        $crop = $body['crop'] ?? null;
+        $lines = '';
+
+        if ($crop !== null) {
+            if (!is_array($crop)) {
+                return $this->error(400, 'invalid-crop');
+            }
+
+            foreach (['top' => 'TOP', 'left' => 'LEFT', 'height' => 'HEIGHT', 'width' => 'WIDTH'] as $key => $tag) {
+                $value = $crop[$key] ?? null;
+                $least = $key === 'height' || $key === 'width' ? 1 : 0;
+
+                if (!is_int($value) || $value < $least) {
+                    return $this->error(400, 'invalid-crop');
+                }
+
+                $lines .= "\n3 " . $tag . ' ' . $value;
+            }
+
+            $lines = "\n2 CROP" . $lines;
+        }
+
+        $links = $this->mediaLinks($record, $media->xref());
+
+        if ($links === []) {
+            $record->createFact('1 OBJE @' . $media->xref() . '@' . $lines, true);
+
+            return $this->written($record, ['media' => $media->xref()]);
+        }
+
+        if (!$links[0]->canEdit()) {
+            return $this->error(403, 'fact-locked');
+        }
+
+        $gedcom = GedcomText::replaceSubrecords("\n" . $links[0]->gedcom(), 2, 'CROP', $lines);
+        $record->updateFact($links[0]->id(), substr($gedcom, 1), true);
+
+        return $this->written($record, ['media' => $media->xref()]);
+    }
+
+    /**
      * Hauptfoto festlegen: ?xref=I123   Rumpf: { media: "M45" }
      * webtrees zeigt als Hauptfoto das erste verknuepfte Bild - die Verknuepfung rueckt deshalb vor alle anderen.
      */
