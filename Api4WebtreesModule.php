@@ -6,6 +6,7 @@ namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Elements\CustomElement;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
@@ -262,6 +263,36 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     {
         View::registerNamespace($this->name(), $this->resourcesFolder() . 'views/');
         $this->takeOverOldSettings();
+        self::registerCropTags();
+    }
+
+    /**
+     * GEDCOM 7 "2 CROP" an Medienverweisen (Route MediaCrop) - webtrees 2.2 kennt das Tag nicht; ohne Anmeldung zeigt
+     * das Bearbeitungsformular es rot als unbekannt. Wie webtrees selbst es fuer GEDCOM-7-Tags tut
+     * (app/CustomTags/Gedcom7.php). "Auf Fehler pruefen" prueft nur gegen Standard-GEDCOM und meldet es weiter.
+     */
+    private static function registerCropTags(): void
+    {
+        $factory = Registry::elementFactory();
+        $tags    = [];
+        $subtags = [];
+
+        foreach (['INDI', 'FAM'] as $record) {
+            $tags[$record . ':OBJE:CROP']        = new CustomElement(I18N::translate('Crop'));
+            $tags[$record . ':OBJE:CROP:TOP']    = new CustomElement(I18N::translate('Top'));
+            $tags[$record . ':OBJE:CROP:LEFT']   = new CustomElement(I18N::translate('Left'));
+            $tags[$record . ':OBJE:CROP:HEIGHT'] = new CustomElement(I18N::translate('Height'));
+            $tags[$record . ':OBJE:CROP:WIDTH']  = new CustomElement(I18N::translate('Width'));
+        }
+
+        $factory->registerTags($tags);
+
+        foreach (['INDI', 'FAM'] as $record) {
+            $subtags[$record . ':OBJE']      = [['CROP', '0:1']];
+            $subtags[$record . ':OBJE:CROP'] = [['TOP', '0:1'], ['LEFT', '0:1'], ['HEIGHT', '0:1'], ['WIDTH', '0:1']];
+        }
+
+        $factory->registerSubTags($subtags);
     }
 
     public function resourcesFolder(): string
@@ -336,6 +367,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
                 // webtrees hat die Bezeichnungen der GEDCOM-Tags ("Geburt", "Beruf" ...) schon in der alten
                 // Sprache aufgebaut - nach dem Wechsel neu registrieren, sonst bleiben sie stehen.
                 (new Gedcom())->registerTags(Registry::elementFactory(), true);
+                self::registerCropTags();
             }
         }
 
