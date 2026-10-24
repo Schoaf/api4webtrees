@@ -40,6 +40,10 @@ use Illuminate\Support\Collection;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use InvalidArgumentException;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\ImageManager;
+use Throwable;
 
 use function array_filter;
 use function array_flip;
@@ -49,6 +53,8 @@ use function array_values;
 use function str_contains;
 use function array_unique;
 use function count;
+use function extension_loaded;
+use function json_encode;
 use function explode;
 use function implode;
 use function in_array;
@@ -246,6 +252,54 @@ trait ReadActions
     /**
      * Eine Person mit Ereignissen, Familien und Medien: ?xref=I123
      */
+    /**
+     * Das Hauptfoto einer Person als quadratische Vorschau ihres Ausschnitts (CROP am Verweis): ?xref=I123
+     * Antwort ist das Bild selbst. portraitUrl() zeigt hierher, sobald der Verweis einen Ausschnitt hat.
+     */
+    public function getPortraitAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree       = Validator::attributes($request)->tree();
+        $individual = Registry::individualFactory()->make($this->xref($request), $tree);
+        $denied     = $this->denyShow($individual);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $media_file = $individual->findHighlightedMediaFile();
+        $crop       = $media_file !== null && $media_file->isImage() ? $this->portraitCrop($individual, $media_file) : null;
+
+        if ($media_file === null || $crop === null || Registry::imageFactory()->thumbnailNeedsWatermark($media_file, Auth::user())) {
+            return $this->error(404, 'no-portrait');
+        }
+
+        $filesystem = $tree->mediaFilesystem();
+        $path       = $media_file->filename();
+        $size       = self::THUMB_SIZE;
+
+        try {
+            $key = implode(':', ['api4webtrees-portrait', $tree->name(), $path, (string) $filesystem->lastModified($path), (string) json_encode($crop), (string) $size]);
+
+            $data = Registry::cache()->file()->remember($key, static function () use ($filesystem, $path, $crop, $size, $media_file): string {
+                $manager = extension_loaded('imagick') ? new ImageManager(new ImagickDriver()) : new ImageManager(new GdDriver());
+                $image   = $manager->read($filesystem->readStream($path));
+
+                // GEDCOM 7: fehlende Angaben sind 0 bzw. bis zum Bildrand; was ueber den Rand reicht, endet dort.
+                $left   = min($crop['left'] ?? 0, $image->width() - 1);
+                $top    = min($crop['top'] ?? 0, $image->height() - 1);
+                $width  = min($crop['width'] ?? $image->width(), $image->width() - $left);
+                $height = min($crop['height'] ?? $image->height(), $image->height() - $top);
+
+                return $image->crop($width, $height, $left, $top)->cover($size, $size)
+                    ->encodeByMediaType($media_file->mimeType(), quality: 85)->toString();
+            }, 2592000);
+        } catch (Throwable) {
+            return $this->error(404, 'no-portrait');
+        }
+
+        return response($data, 200, ['content-type' => $media_file->mimeType(), 'cache-control' => 'private, max-age=86400']);
+    }
+
     public function getIndividualAction(ServerRequestInterface $request): ResponseInterface
     {
         $tree       = Validator::attributes($request)->tree();

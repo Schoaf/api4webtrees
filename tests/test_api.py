@@ -880,6 +880,51 @@ class Ausschnitt(unittest.TestCase):
             self.assertNotEqual(True, (r.json or {}).get("ok"), rolle)
         s.post("UnlinkMedia", "gedcoml", {"media": "M1"}, xref="I2")
 
+    def test_portrait(self):
+        """Stufe 39: thumb zeigt den Ausschnitt des Hauptfotos (Route Portrait)."""
+        import struct
+        import zlib
+        s = U.sitzung("admin")
+        # 100 x 60: links rot, rechts blau
+        zeile = b"\x00" + (b"\xff\x00\x00" * 50) + (b"\x00\x00\xff" * 50)
+        def block(art, daten):
+            return struct.pack(">I", len(daten)) + art + daten + struct.pack(">I", zlib.crc32(art + daten) & 0xffffffff)
+        png = (b"\x89PNG\r\n\x1a\n" + block(b"IHDR", struct.pack(">IIBBBBB", 100, 60, 8, 2, 0, 0, 0))
+               + block(b"IDAT", zlib.compress(zeile * 60)) + block(b"IEND", b""))
+        rumpf, art = manifest.multipart({"title": "Rot und Blau"}, ("rotblau.png", png, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/gedcoml", xref="I2"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art)
+        req.add_header("X-CSRF-TOKEN", s.csrf)
+        m = s._senden(req).json["media"]
+        self.assertEqual(True, s.post("PrimaryMedia", "gedcoml", {"media": m}, xref="I2").json.get("ok"))
+
+        def thumb():
+            return s.get("Individual", "gedcoml", xref="I2").json["person"]["thumb"]
+
+        def bild(url):
+            with s.oeffner.open(url, timeout=60) as r:
+                return r.headers.get("Content-Type"), r.read()
+
+        self.assertNotIn("Portrait", thumb())
+        s.post("MediaCrop", "gedcoml", {"media": m, "crop": {"top": 0, "left": 0, "height": 60, "width": 50}}, xref="I2")
+        rot_url = thumb()
+        self.assertIn("Portrait", rot_url)
+        art, rot = bild(rot_url)
+        self.assertEqual("image/png", art)
+        self.assertEqual((200, 200), struct.unpack(">II", rot[16:24]))
+        s.post("MediaCrop", "gedcoml", {"media": m, "crop": {"top": 0, "left": 50, "height": 60, "width": 50}}, xref="I2")
+        blau_url = thumb()
+        self.assertNotEqual(rot_url, blau_url, "neuer Ausschnitt, neue Adresse")
+        self.assertNotEqual(rot, bild(blau_url)[1])
+        # Ueber den Rand: endet am Rand statt zu scheitern
+        s.post("MediaCrop", "gedcoml", {"media": m, "crop": {"top": 50, "left": 90, "height": 500, "width": 500}}, xref="I2")
+        self.assertEqual("image/png", bild(thumb())[0])
+        # Ohne Ausschnitt wieder die Vorschau von webtrees; Portrait meldet no-portrait
+        s.post("MediaCrop", "gedcoml", {"media": m, "crop": None}, xref="I2")
+        self.assertNotIn("Portrait", thumb())
+        self.assertEqual("no-portrait", s.get("Portrait", "gedcoml", xref="I2").json.get("error"))
+        s.post("UnlinkMedia", "gedcoml", {"media": m}, xref="I2")
+
 
 class Zugang(unittest.TestCase):
     """Stufe 36: wer ein Ereignis, eine Person, eine Familie sehen darf - fuer Buecher, die weitergegeben werden (Issue 21)."""

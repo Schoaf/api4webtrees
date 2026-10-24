@@ -15,6 +15,7 @@ use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\MediaFile;
 use Fisharebest\Webtrees\Note;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\PlaceLocation;
@@ -159,12 +160,39 @@ trait JsonBuilders
         return $summary;
     }
 
-    /** Das Hauptfoto als quadratische Vorschau - null, wenn es keins gibt oder es kein Bild ist. */
+    /**
+     * Das Hauptfoto als quadratische Vorschau - null, wenn es keins gibt oder es kein Bild ist. Hat der Verweis der Person
+     * auf das Hauptfoto einen Ausschnitt (CROP), zeigt die Vorschau diesen Ausschnitt (Route Portrait); mit Wasserzeichen
+     * bleibt es bei der Vorschau von webtrees.
+     */
     private function portraitUrl(Individual $individual): string|null
     {
         $media_file = $individual->findHighlightedMediaFile();
 
-        return $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(self::THUMB_SIZE, self::THUMB_SIZE, 'crop') : null;
+        if ($media_file === null || !$media_file->isImage()) {
+            return null;
+        }
+
+        $crop = $this->portraitCrop($individual, $media_file);
+
+        if ($crop !== null && !Registry::imageFactory()->thumbnailNeedsWatermark($media_file, Auth::user())) {
+            // crop im Adresstext: ein neuer Ausschnitt ist eine neue Adresse - Zwischenspeicher zeigen nichts Altes.
+            return $this->actionUrl('Portrait', $individual->tree()->name(), ['xref' => $individual->xref(), 'crop' => substr(md5((string) json_encode($crop)), 0, 8)]);
+        }
+
+        return $media_file->imageUrl(self::THUMB_SIZE, self::THUMB_SIZE, 'crop');
+    }
+
+    /**
+     * Der Ausschnitt am Verweis der Person auf das Medium dieser Datei, oder null.
+     *
+     * @return array{top:int|null,left:int|null,height:int|null,width:int|null}|null
+     */
+    private function portraitCrop(Individual $individual, MediaFile $media_file): array|null
+    {
+        $link = $individual->facts(['OBJE'])->first(static fn (Fact $fact): bool => $fact->value() === '@' . $media_file->media()->xref() . '@');
+
+        return $link instanceof Fact ? self::cropJson($link->gedcom()) : null;
     }
 
     /**

@@ -31,6 +31,9 @@ P = lambda name, beschreibung, typ="string", pflicht=False: {  # noqa: E731
     "name": name, "in": "query", "required": pflicht, "description": beschreibung, "schema": {"type": typ}}
 XREF = P("xref", "Record identifier, e.g. `I123`", pflicht=True)
 
+# Routen, die ein Bild statt JSON liefern
+BILDROUTEN = {"Portrait"}
+
 # (Methode, Aktion, mit Baum, Stufe, Rolle, Kurzbeschreibung, Parameter, Rumpf)
 ROUTEN = [
     ("get", "Info", False, 1, "visitor",
@@ -55,7 +58,8 @@ ROUTEN = [
      "to users whom webtrees shows pending changes, i.e. editors and moderators) and `sex` is the value the user sees in "
      "the facts, also while a change of sex is pending. From level 38 each media entry has `crop`: the GEDCOM 7 crop "
      "(`2 CROP`) of this link as `{top, left, height, width}` in pixels (a missing value is `null`), else `null` – the "
-     "part of the image that shows this individual.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "part of the image that shows this individual. From level 39 a `thumb` (of this individual and of everyone in the "
+     "answers that carry one) shows that part when the link to the main photo has a crop – see `Portrait`.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",
@@ -211,6 +215,11 @@ ROUTEN = [
      "`multipart/form-data`: `file`, `title?`, `note?`"),
     ("post", "UnlinkMedia", True, 8, "editor", "Unlink a media object; object and file stay.", [XREF], "`{media}`"),
     ("post", "PrimaryMedia", True, 8, "editor", "Make a linked image the main photo.", [XREF], "`{media}`"),
+    ("get", "Portrait", True, 39, "visitor",
+     "The main photo of an individual as a square thumbnail of their crop (`2 CROP` at their link to it) – the image itself, "
+     "not JSON. `thumb` points here whenever that link has a crop (not when webtrees adds a watermark for the user); `crop` "
+     "in the address changes with the crop. Error `no-portrait` when there is no cropped main photo.",
+     [XREF, P("crop", "Changes with the crop, so caches never show an old part")], None),
     ("post", "MediaCrop", True, 38, "editor",
      "Set the crop of a media link (GEDCOM 7 `2 CROP`, pixels): the part of the image that shows this record – each "
      "linked individual can have their own part of the same image, the file stays unchanged. Links the media object "
@@ -453,6 +462,9 @@ def openapi(beispiele):
             "responses": {"200": {"description": "Result – or an error object (`ok: false`, see `Error`)",
                                   "content": {"application/json": {"schema": ableiten(werte) if werte else {}}}}},
         }
+        if aktion in BILDROUTEN:
+            op["responses"]["200"]["content"] = {"image/*": {"schema": {"type": "string", "format": "binary"}},
+                                                 "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
         if methode == "post":
             op["parameters"].append({"name": "X-CSRF-TOKEN", "in": "header", "required": True,
                                      "schema": {"type": "string"}, "description": "`Info.csrf`"})
@@ -512,7 +524,7 @@ def markdown(api):
                 z.append("")
             if op.get("x-body"):
                 z += [f"Body: {op['x-body']}", ""]
-            schema = op["responses"]["200"]["content"]["application/json"]["schema"]
+            schema = {} if op["operationId"][3:] in BILDROUTEN else op["responses"]["200"]["content"]["application/json"]["schema"]
             if schema.get("properties"):
                 felder = ", ".join(f"`{k}`" for k in schema["properties"])
                 z += [f"Answer fields: {felder} – full schema in openapi.json.", ""]
