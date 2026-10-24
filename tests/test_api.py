@@ -840,6 +840,47 @@ class GedcomL(unittest.TestCase):
                          (t["status"], t["completed"]["year"], t["solution"], t["reminder"], t["category"], t["priority"]))
 
 
+class Ausschnitt(unittest.TestCase):
+    """Stufe 38: Ausschnitt eines Medienverweises (GEDCOM 7 CROP) - jede Person ihr Teil desselben Bildes."""
+
+    def test_ausschnitt(self):
+        s = U.sitzung("admin")
+        ausschnitt = {"top": 10, "left": 20, "height": 30, "width": 40}
+
+        def medien():
+            return {m["xref"]: m["crop"] for m in s.get("Individual", "gedcoml", xref="I2").json["media"]}
+
+        # Noch nicht verknuepft: MediaCrop verknuepft mit Ausschnitt
+        self.assertNotIn("M1", medien())
+        a = s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": ausschnitt}, xref="I2").json
+        self.assertEqual((True, "M1"), (a.get("ok"), a.get("media")), a)
+        self.assertIn("1 OBJE @M1@\n2 CROP\n3 TOP 10\n3 LEFT 20\n3 HEIGHT 30\n3 WIDTH 40", gedcoml_ged("I2"))
+        self.assertEqual(ausschnitt, medien()["M1"])
+        # Aendern ersetzt den Ausschnitt, die Verknuepfung bleibt eine
+        ausschnitt = {"top": 0, "left": 5, "height": 100, "width": 80}
+        self.assertEqual(True, s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": ausschnitt}, xref="I2").json.get("ok"))
+        self.assertEqual(1, gedcoml_ged("I2").count("1 OBJE @M1@"))
+        self.assertEqual(1, gedcoml_ged("I2").count("2 CROP"))
+        self.assertEqual(ausschnitt, medien()["M1"])
+        # Die andere Person mit demselben Bild behaelt ihr Bild ohne Ausschnitt
+        self.assertIsNone(next(m for m in s.get("Individual", "gedcoml", xref="I1").json["media"] if m["xref"] == "M1")["crop"])
+        # Ungueltig
+        for falsch in ({"top": -1, "left": 0, "height": 1, "width": 1}, {"top": 0, "left": 0, "height": 0, "width": 1},
+                       {"top": 0, "left": 0, "height": 1}, {"top": "1", "left": 0, "height": 1, "width": 1}, "10,20,30,40"):
+            r = s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": falsch}, xref="I2")
+            self.assertEqual((400, "invalid-crop"), (r.json.get("status"), r.json.get("error")), falsch)
+        self.assertEqual("media-not-found", s.post("MediaCrop", "gedcoml", {"media": "M99", "crop": None}, xref="I2").json.get("error"))
+        # null entfernt den Ausschnitt, die Verknuepfung bleibt
+        self.assertEqual(True, s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": None}, xref="I2").json.get("ok"))
+        self.assertNotIn("CROP", gedcoml_ged("I2"))
+        self.assertIsNone(medien()["M1"])
+        # Gaeste und Mitglieder duerfen nicht
+        for rolle in (None, "mitglied"):
+            r = U.sitzung(rolle).post("MediaCrop", "gedcoml", {"media": "M1", "crop": None}, xref="I2")
+            self.assertNotEqual(True, (r.json or {}).get("ok"), rolle)
+        s.post("UnlinkMedia", "gedcoml", {"media": "M1"}, xref="I2")
+
+
 class Zugang(unittest.TestCase):
     """Stufe 36: wer ein Ereignis, eine Person, eine Familie sehen darf - fuer Buecher, die weitergegeben werden (Issue 21)."""
 

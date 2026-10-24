@@ -53,7 +53,9 @@ ROUTEN = [
      "One individual with facts, parent/spouse/step families, media and – with `relativeTo` – the relationship "
      "to another individual. From level 28 each fact has `pending` (`true`: a change waiting for approval, visible only "
      "to users whom webtrees shows pending changes, i.e. editors and moderators) and `sex` is the value the user sees in "
-     "the facts, also while a change of sex is pending.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "the facts, also while a change of sex is pending. From level 38 each media entry has `crop`: the GEDCOM 7 crop "
+     "(`2 CROP`) of this link as `{top, left, height, width}` in pixels (a missing value is `null`), else `null` – the "
+     "part of the image that shows this individual.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",
@@ -209,6 +211,12 @@ ROUTEN = [
      "`multipart/form-data`: `file`, `title?`, `note?`"),
     ("post", "UnlinkMedia", True, 8, "editor", "Unlink a media object; object and file stay.", [XREF], "`{media}`"),
     ("post", "PrimaryMedia", True, 8, "editor", "Make a linked image the main photo.", [XREF], "`{media}`"),
+    ("post", "MediaCrop", True, 38, "editor",
+     "Set the crop of a media link (GEDCOM 7 `2 CROP`, pixels): the part of the image that shows this record – each "
+     "linked individual can have their own part of the same image, the file stays unchanged. Links the media object "
+     "first if it is not linked yet; `crop: null` removes the crop. Errors `media-not-found`, `invalid-crop` (`top`/`left` "
+     "integers ≥ 0, `height`/`width` integers ≥ 1), `fact-locked`.", [XREF],
+     "`{media, crop: {top, left, height, width} | null}`"),
     ("post", "Bookmarks", True, 11, "member", "Add or remove a bookmark; answers with both lists. From level 30 `note` (text shown with the favourite) and "
      "`forTree: true` (the tree's favourites, managers only, error `not-manager`).", [], "`{xref, add: true|false, note?, forTree?}`"),
     ("get", "Tasks", True, 30, "member",
@@ -414,6 +422,7 @@ def sammeln(u):
                                                                       ("Individual", "testbaum", {"xref": "I1", "relativeTo": "I3"})]:
             merken("get", aktion, s.get(aktion, b, **params))
 
+    merken("post", "MediaCrop", admin.post("MediaCrop", "testbaum", {"media": m, "crop": {"top": 0, "left": 0, "height": 1, "width": 1}}, xref="I1"))
     merken("post", "UnlinkMedia", admin.post("UnlinkMedia", "testbaum", {"media": m}, xref="I1"))
     merken("post", "Reject", admin.post("Reject", "testbaum", {}, xref="I2"))
     merken("post", "Accept", admin.post("Accept", "testbaum", {}))

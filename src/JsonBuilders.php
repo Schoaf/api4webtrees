@@ -684,12 +684,35 @@ trait JsonBuilders
                 // factId: die Verknuepfung (1 OBJE @M1@) - fuer UnlinkMedia und PrimaryMedia.
                 // highlighted (ab Stufe 34): GEDCOM-L "_PRIM Y" am Verweis oder an der Datei - so markieren andere Programme
                 // das Bild, das sie als Hauptbild zeigen; webtrees selbst nimmt weiter das erste Bild (primary).
+                // crop: GEDCOM 7 "2 CROP" am Verweis - der Ausschnitt dieses Datensatzes, das Bild selbst bleibt ganz.
                 $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary,
-                    'highlighted' => strtoupper(trim($fact->attribute('_PRIM'))) === 'Y' || preg_match('/\n2 _PRIM Y\b/i', $media->gedcom()) === 1];
+                    'highlighted' => strtoupper(trim($fact->attribute('_PRIM'))) === 'Y' || preg_match('/\n2 _PRIM Y\b/i', $media->gedcom()) === 1,
+                    'crop' => self::cropJson($fact->gedcom())];
             }
         }
 
         return $data;
+    }
+
+    /**
+     * Der Ausschnitt eines Medienverweises (GEDCOM 7: "2 CROP" mit "3 TOP/LEFT/HEIGHT/WIDTH", in Pixeln) oder null.
+     * Fehlende Angaben sind null - TOP und LEFT dann 0, HEIGHT und WIDTH bis zum Bildrand, wie GEDCOM 7 es vorsieht.
+     *
+     * @return array{top:int|null,left:int|null,height:int|null,width:int|null}|null
+     */
+    public static function cropJson(string $link_gedcom): array|null
+    {
+        if (preg_match('/\n2 CROP(?: [^\n]*)?((?:\n[3-9] [^\n]*)*)/', $link_gedcom, $match) !== 1) {
+            return null;
+        }
+
+        $crop = [];
+
+        foreach (['top' => 'TOP', 'left' => 'LEFT', 'height' => 'HEIGHT', 'width' => 'WIDTH'] as $key => $tag) {
+            $crop[$key] = preg_match('/\n3 ' . $tag . ' (\d+)/', $match[1], $value) === 1 ? (int) $value[1] : null;
+        }
+
+        return $crop;
     }
 
     /**
