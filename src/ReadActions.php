@@ -300,6 +300,43 @@ trait ReadActions
         return response($data, 200, ['content-type' => $media_file->mimeType(), 'cache-control' => 'private, max-age=86400']);
     }
 
+    /**
+     * Ein Medienobjekt mit seinen Dateien und allen verknuepften Personen, je mit ihrem Ausschnitt (CROP am Verweis):
+     * ?xref=M45 - wer auf einem Bild markiert ist.
+     */
+    public function getMediaObjectAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $media  = Registry::mediaFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyShow($media);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $people = [];
+
+        foreach (Registry::container()->get(LinkedRecordService::class)->linkedIndividuals($media) as $individual) {
+            if (!$individual->canShow()) {
+                continue;
+            }
+
+            $link = $individual->facts(['OBJE'])->first(static fn (Fact $fact): bool => $fact->value() === '@' . $media->xref() . '@');
+
+            if ($link instanceof Fact) {
+                $people[] = $this->personShort($individual) + ['factId' => $link->id(), 'crop' => self::cropJson($link->gedcom())];
+            }
+        }
+
+        return response([
+            'xref'    => $media->xref(),
+            'title'   => $this->recordName($media),
+            'canEdit' => $media->canEdit(),
+            'files'   => $this->mediaFilesJson($media),
+            'people'  => $people,
+        ]);
+    }
+
     public function getIndividualAction(ServerRequestInterface $request): ResponseInterface
     {
         $tree       = Validator::attributes($request)->tree();
