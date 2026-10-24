@@ -12,6 +12,7 @@ use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Media;
 use Fisharebest\Webtrees\Note;
@@ -24,9 +25,11 @@ use Fisharebest\Webtrees\Services\LinkedRecordService;
 use Fisharebest\Webtrees\Tree;
 use Illuminate\Support\Collection;
 
+use function array_key_last;
 use function array_keys;
 use function array_map;
 use function array_pad;
+use function array_slice;
 use function class_exists;
 use function explode;
 use function implode;
@@ -39,6 +42,7 @@ use function str_replace;
 use function str_contains;
 use function strip_tags;
 use function strrpos;
+use function strtr;
 use function substr;
 use function trim;
 use function usort;
@@ -53,6 +57,15 @@ use const ENT_QUOTES;
  */
 trait JsonBuilders
 {
+    // Unterangaben eines Fakts mit eigenem Feld im JSON - sie stehen nicht noch einmal in details
+    private const array DETAIL_FIELDS = [
+        'DATE', 'PLAC', 'TYPE', 'ADDR', 'NOTE', 'SNOTE', 'SOUR', 'OBJE', 'ASSO', '_ASSO', '_GODP', '_WITN', 'RESN',
+        'GIVN', 'SURN', 'NPFX', 'SPFX', 'NSFX', 'NICK', '_RUFNAME',
+    ];
+
+    // Unter "1 ASSO": die Beziehung steht schon in associates
+    private const array ASSOCIATE_FIELDS = ['RELA', 'ROLE'];
+
     /**
      * Das Geschlecht (M, F, X oder U), wie der Benutzer es in den Fakten sieht (ab Stufe 28). webtrees' sex() nimmt den
      * ersten "1 SEX" - bei einer ausstehenden Aenderung ist das noch der freigegebene Wert, waehrend facts() dem
@@ -111,7 +124,8 @@ trait JsonBuilders
         $summary = [
             'xref'       => $individual->xref(),
             'name'       => $this->recordName($individual),
-            'sortName'   => $individual->sortName(),
+            // webtrees sortiert unbekannte Namen als "@N.N., @P.N."; angezeigt werden sie wie in webtrees als "…"
+            'sortName'   => strtr($individual->sortName(), ['@N.N.' => I18N::translateContext('Unknown surname', '…'), '@P.N.' => I18N::translateContext('Unknown given name', '…')]),
             'given'      => $individual->canShowName() ? $given : '',
             'surname'    => $individual->canShowName() ? $surname : '',
             'sex'        => $this->sexCode($individual),
@@ -368,6 +382,8 @@ trait JsonBuilders
                 // Ab Stufe 23: eine Notiz, die auf einen Notiz-Datensatz zeigt (1 NOTE @N1@) - Clients aendern sie dann
                 // nicht als Text, sonst ginge die Verknuepfung verloren.
                 'noteXref'       => $tag === 'NOTE' && preg_match('/^@([^@]+)@$/', $fact->value(), $nx) === 1 ? $nx[1] : null,
+                // Ab Stufe 37: alle uebrigen Angaben des Fakts als Zeilen zum Anzeigen (Alter, Telefon, Abstammung ...)
+                'details'        => $this->factDetails($fact, $tree),
             ];
         }
 
@@ -1160,6 +1176,60 @@ trait JsonBuilders
      * Wie plain(), aber Zeilenumbrueche und Absaetze bleiben erhalten. webtrees liefert mehrzeilige Texte als HTML
      * (<br>, <p>); ohne diesen Schritt klebten die Zeilen aneinander ("seines Vaters.In der Familie ...").
      */
+    /**
+     * Die Unterangaben eines Fakts, die kein eigenes Feld haben, als Zeilen: Bezeichnung und Wert, wie webtrees sie
+     * anzeigt, in der Sprache der Anfrage; level 0 steht direkt unter dem Fakt. So zeigt ein Client jede Angabe, auch
+     * eine, die er nicht kennt, ohne das GEDCOM zu lesen.
+     *
+     * @return list<array{tag:string,label:string,value:string,level:int}>
+     */
+    private function factDetails(Fact $fact, Tree $tree): array
+    {
+        // Fortsetzungszeilen an ihren Wert haengen
+        $lines = [];
+        foreach (array_slice(explode("\n", $fact->gedcom()), 1) as $line) {
+            if (preg_match('/^(\d) (CONT|CONC)(?: (.*))?$/', $line, $c) === 1 && $lines !== []) {
+                $lines[array_key_last($lines)][2] .= ($c[2] === 'CONT' ? "\n" : '') . ($c[3] ?? '');
+            } elseif (preg_match('/^(\d) (\S+)(?: (.*))?$/', $line, $m) === 1) {
+                $lines[] = [(int) $m[1], $m[2], $m[3] ?? ''];
+            }
+        }
+
+        // Ein Quellenverweis steht schon in sources, die Beziehung einer verknuepften Person in associates
+        if ($this->shortTag($fact->tag()) === 'SOUR') {
+            return [];
+        }
+
+        $covered = $this->shortTag($fact->tag()) === 'ASSO' ? [...self::DETAIL_FIELDS, ...self::ASSOCIATE_FIELDS] : self::DETAIL_FIELDS;
+        $rows    = [];
+        $stack   = explode(':', $fact->tag());
+        $skip    = null;
+
+        foreach ($lines as [$level, $tag, $value]) {
+            if ($skip !== null && $level > $skip) {
+                continue;
+            }
+
+            $skip  = null;
+            $stack = [...array_slice($stack, 0, $level), $tag];
+
+            if ($level === 2 && in_array($tag, $covered, true) || $tag === 'CHAN') {
+                $skip = $level;
+                continue;
+            }
+
+            $element = Registry::elementFactory()->make(implode(':', $stack));
+            $rows[]  = [
+                'tag'   => $tag,
+                'label' => $this->plain($element->label()),
+                'value' => $value === '' ? '' : $this->plainLines($element->value($value, $tree)),
+                'level' => $level - 2,
+            ];
+        }
+
+        return $rows;
+    }
+
     private function plainLines(string $html): string
     {
         $html  = (string) preg_replace('/<br\s*\/?>/i', "\n", $html);

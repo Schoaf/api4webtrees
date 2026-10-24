@@ -944,6 +944,18 @@ class Schreiben(unittest.TestCase):
         a = s.post("DeleteFact", "testbaum", {"factId": reli[0]["id"]}, xref="I1")
         self.assertEqual("fact-locked", a.json["error"], a)
 
+    def test_details(self):
+        """Stufe 37: Angaben ohne eigenes Feld kommen als details - Bezeichnung und Wert, wie webtrees sie zeigt."""
+        s = U.sitzung("admin")
+        a = s.post("Fact", "testbaum", {"gedcom": "1 DEAT\n2 DATE 1900\n2 AGE 72y\n2 CAUS Fieber\n2 AGNC Standesamt"}, xref="I3")
+        self.assertEqual(True, a.json["ok"], a)
+        tod = next(f for f in s.get("Individual", "testbaum", xref="I3").json["facts"] if f["tag"] == "DEAT" and f["date"] and f["date"]["year"] == 1900)
+        self.assertEqual([("AGE", 0), ("CAUS", 0), ("AGNC", 0)], [(d["tag"], d["level"]) for d in tod["details"]])
+        self.assertTrue(all(d["label"] for d in tod["details"]), tod["details"])
+        self.assertIn("72", tod["details"][0]["value"])
+        self.assertEqual(("Fieber", "Standesamt"), (tod["details"][1]["value"], tod["details"][2]["value"]))
+        self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": tod["id"]}, xref="I3").json["ok"])
+
     def test_person_anlegen(self):
         s = U.sitzung("admin")
         a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Neue", "surname": "Testperson", "sex": "F",
@@ -1372,6 +1384,7 @@ class Schreiben(unittest.TestCase):
         self.assertIn("App und Schnittstelle werden gemeinsam entwickelt", android)
         self.assertLess(android.index("wtWin"), android.index("wtTux"))
         self.assertIn("webtreesand://connect?", android)
+        self.assertIn("github.com/thobgg/api4webtrees", android)
         self.assertNotIn("noch kein eigenes Programm", android)
 
         windows = seite("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
@@ -1398,6 +1411,7 @@ class Schreiben(unittest.TestCase):
         self.assertIn("wt-apps.png", verbinden)
         self.assertIn("wtAnd herunterladen", verbinden)
         self.assertNotIn("wtWin", verbinden)
+        self.assertIn("github.com/thobgg/api4webtrees", verbinden)
 
     def test_app_abschalten(self):
         """Einstellungen: eine abgehakte App verschwindet von der Seite App und aus der Fusszeile."""

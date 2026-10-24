@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.23.0 – 2026-10-18
+API level 37. **`details` at every fact:** the sub-structures without a field of their own – age, cause, agency, phone,
+e-mail, web address, pedigree, transliterations, LDS status … – as rows with label and value as webtrees shows them, in
+the language of the request. A client shows them without reading GEDCOM, including ones it does not know. **Unknown
+names** in `sortName` are `…` as in webtrees, no longer `@N.N.`/`@P.N.`.
+
+## 1.22.0 – 2026-10-14
+API level 36, unchanged. **webtrees mobile for Android** (Google Play), added by Andreas Scharf: the app is now listed
+for Android phones as well as for iPhone and iPad, with the Google Play badge. **The “App” and “Connect” pages name the
+module** with a link to the repository: all apps there talk to the server through api4webtrees. **A rule for entries in
+the apps list** (README, “Apps on the “App” page”): the store description or README of an app says that it needs the
+module on the server, with a link to the repository.
+
 ## 1.21.0 – 2026-10-14
 **API levels 34 to 36: the GEDCOM-L addendum, read completely, three parts of it writable – and nothing of it lost when
 writing; who may see each fact.** Additive.

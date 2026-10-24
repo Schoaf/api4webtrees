@@ -197,7 +197,8 @@ specific to one app. The “App” page, the “Connect” page, the note and th
 `src/Apps.php`. To add an app, send a pull request with one entry: name, author, kind (phone or PC), devices, download
 addresses (https), the URL scheme for one-tap connecting, for a store link the store badge under `resources/img` and,
 optionally, the app's logo under `resources/img` (`icon`, square PNG or SVG, shown before the name on the “App” and “Connect” pages).
-Conditions: the app is publicly installable (store or release), and it accepts the connect link below. The tests reject
+Conditions: the app is publicly installable (store or release), it accepts the connect link below, and its store
+description or README says that the app needs the api4webtrees module on the server, with a link to this repository. The tests reject
 entries with missing fields, non-https links or a scheme already taken. Managers can untick any app in the settings.
 
 The contract for one-tap connecting is the one wtAnd uses:
