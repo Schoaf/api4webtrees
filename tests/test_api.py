@@ -880,6 +880,21 @@ class Ausschnitt(unittest.TestCase):
             self.assertNotEqual(True, (r.json or {}).get("ok"), rolle)
         s.post("UnlinkMedia", "gedcoml", {"media": "M1"}, xref="I2")
 
+    def test_medienobjekt(self):
+        """Stufe 40: wer auf einem Bild markiert ist - alle verknuepften Personen mit ihrem Ausschnitt."""
+        s = U.sitzung("admin")
+        ausschnitt = {"top": 1, "left": 2, "height": 3, "width": 4}
+        s.post("MediaCrop", "gedcoml", {"media": "M1", "crop": ausschnitt}, xref="I2")
+        m = s.get("MediaObject", "gedcoml", xref="M1").json
+        self.assertEqual(("M1", True), (m["xref"], m["canEdit"]))
+        self.assertTrue(m["files"])
+        personen = {p["xref"]: p["crop"] for p in m["people"]}
+        self.assertEqual(ausschnitt, personen["I2"])
+        self.assertIsNone(personen["I1"])
+        self.assertTrue(all(p["factId"] for p in m["people"]))
+        self.assertEqual("not-found", s.get("MediaObject", "gedcoml", xref="M99").json.get("error"))
+        s.post("UnlinkMedia", "gedcoml", {"media": "M1"}, xref="I2")
+
     def test_portrait(self):
         """Stufe 39: thumb zeigt den Ausschnitt des Hauptfotos (Route Portrait)."""
         import struct
