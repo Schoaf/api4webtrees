@@ -342,6 +342,11 @@ An error – HTTP 200, the intended code in `status`:
 Start with the header of `Api4WebtreesModule.php`: it is the entry point and lists which part of the module lives
 in which file under `src/`.
 
+### Contributing
+
+Pull requests are welcome; the rules (issue first, one feature per PR, no API level in the PR) are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ### Releases
 
 `./build-release.sh` builds `api4webtrees-vX.Y.Z.zip` from the last commit. `latest-version.txt`
