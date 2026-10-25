@@ -244,6 +244,8 @@ user may not see comes with `private: true` and no name; one whose name they may
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Bookmarks` | yes | – | the signed-in user's bookmark list for this tree (persons); stored as a user preference per tree, level 11 |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
+| `MediaObject` | yes | `xref` | one media object with its files and everyone linked to it, each with `factId` and the `crop` of their link – who is marked where on a photo; `canEdit` |
+| `Portrait` | yes | `xref`, `crop?` | the main photo of the person as a square thumbnail of their crop (`2 CROP` at their link) – the image itself, not JSON; `thumb` points here when that link has a crop |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
 | `Places` | yes | `q` | editors only: up to 20 place names of the tree for suggestions while typing; `Wien, Ö` searches per level, like webtrees' own autocomplete |
