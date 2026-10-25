@@ -183,7 +183,7 @@ The interface is complete since level 30 (1.18): every route needed for everyday
 rare from now on – changes and fixes are collected, pull requests are merged without an immediate release.
 
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-30 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+40 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page
@@ -266,6 +266,7 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | `Unlink` | – | `{family, individual}` – removes the person from the family; both records stay |
 | `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?` – uploads and links; the file is stored under the SHA-1 of its content directly in the tree's media folder |
 | `UnlinkMedia` | `xref` | `{media}` – removes the link to the media object; the media object and its file stay |
+| `MediaRotate` | `xref` (media) | `{quarterTurns: 1 \| 2 \| 3}` – turns the image file clockwise and the crops of all links to it along, so every marked frame stays on its face |
 | `MediaCrop` | `xref` | `{media, crop: {top, left, height, width} \| null}` – sets the GEDCOM 7 crop (`2 CROP`, pixels) of the link to the media object: the part of the image that shows this person; links the media object first if needed, `null` removes the crop. The file stays unchanged |
 | `PrimaryMedia` | `xref` | `{media}` – makes this the person's main photo by moving its link before all other media links. While the change is pending, a further edit of the same person restores the old order (webtrees keeps the order of the accepted record; its own “re-order media” page behaves the same) |
 
@@ -343,6 +344,11 @@ An error – HTTP 200, the intended code in `status`:
 
 Start with the header of `Api4WebtreesModule.php`: it is the entry point and lists which part of the module lives
 in which file under `src/`.
+
+### Contributing
+
+Pull requests are welcome; the rules (issue first, one feature per PR, no API level in the PR) are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Releases
 

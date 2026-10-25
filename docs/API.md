@@ -60,6 +60,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `POST UnlinkMedia/{tree}` | 8 | editor | Unlink a media object; object and file stay. |
 | `POST PrimaryMedia/{tree}` | 8 | editor | Make a linked image the main photo. |
 | `GET Portrait/{tree}` | 39 | visitor | The main photo of an individual as a square thumbnail of their crop (`2 CROP` at their link to it) – the image itself, not JSON. |
+| `POST MediaRotate/{tree}` | n | editor | Turn the image of a media object clockwise by 90°, 180° or 270° (`quarterTurns` 1–3). |
 | `POST MediaCrop/{tree}` | 38 | editor | Set the crop of a media link (GEDCOM 7 `2 CROP`, pixels): the part of the image that shows this record – each linked individual can have their own part of the same image, the file stays unchanged. |
 | `GET Tasks/{tree}` | 30 | member | All research tasks of the tree – webtrees' own `_TODO` facts at individuals and families (text, date, user, note), as the module “Research tasks” writes and shows them – at records the user may see, by date. |
 | `POST Task/{tree}` | 30 | editor | Add or change a research task at an individual or family: `1 _TODO text` with `2 DATE` (today when missing), `2 _WT_USER` (the signed-in user when missing) and `2 NOTE`. |
@@ -98,7 +99,7 @@ One individual with facts, parent/spouse/step families, media and – with `rela
 | `xref` | required | Record identifier, e.g. `I123` |
 | `relativeTo` | optional | Relationship relative to this individual (default: own individual) |
 
-Answer fields: `associatedIn`, `canEdit`, `extraChildrenByParent`, `facts`, `lastChange`, `media`, `parentFamilies`, `person`, `relationship`, `siblings`, `spouseFamilies`, `stepFamilies`, `tasks`, `uids` – full schema in openapi.json.
+Answer fields: `associatedIn`, `canEdit`, `facts`, `lastChange`, `media`, `parentFamilies`, `person`, `relationship`, `spouseFamilies`, `stepFamilies`, `tasks`, `uids` – full schema in openapi.json.
 
 ### `GET Family/{tree}`
 
@@ -108,7 +109,7 @@ One family with spouses, children and facts.
 |---|---|---|
 | `xref` | required | Family identifier, e.g. `F12` |
 
-Answer fields: `access`, `children`, `facts`, `husband`, `lastChange`, `maritalStatus`, `marriage`, `media`, `name`, `spouse`, `tasks`, `uids`, `url`, `wife`, `xref` – full schema in openapi.json.
+Answer fields: `access`, `children`, `facts`, `husband`, `lastChange`, `marriage`, `media`, `name`, `spouse`, `tasks`, `uids`, `url`, `wife`, `xref` – full schema in openapi.json.
 
 ### `GET Pedigree/{tree}`
 
@@ -487,6 +488,18 @@ The main photo of an individual as a square thumbnail of their crop (`2 CROP` at
 | `xref` | required | Record identifier, e.g. `I123` |
 | `crop` | optional | Changes with the crop, so caches never show an old part |
 
+### `POST MediaRotate/{tree}`
+
+Turn the image of a media object clockwise by 90°, 180° or 270° (`quarterTurns` 1–3). The file is overwritten with the turned image – GEDCOM has no rotation – and the crop (`2 CROP`) of every link to it turns along, so each marked frame stays on the same face; `turnedCrops` counts them. Needs the right to upload media. Errors `invalid-turns`, `not-an-image`, `upload-not-allowed`, `crop-locked` (a link with a crop the user may not change – nothing is turned).
+
+| parameter | | |
+|---|---|---|
+| `xref` | required | Media object identifier, e.g. `M45` |
+
+Body: `{quarterTurns: 1 | 2 | 3}`
+
+Answer fields: `ok`, `pending`, `turnedCrops`, `xref` – full schema in openapi.json.
+
 ### `POST MediaCrop/{tree}`
 
 Set the crop of a media link (GEDCOM 7 `2 CROP`, pixels): the part of the image that shows this record – each linked individual can have their own part of the same image, the file stays unchanged. Links the media object first if it is not linked yet; `crop: null` removes the crop. Errors `media-not-found`, `invalid-crop` (`top`/`left` integers ≥ 0, `height`/`width` integers ≥ 1), `fact-locked`.
@@ -583,6 +596,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `invalid-quality` |
 | 400 | `invalid-relation` |
 | 400 | `invalid-role` |
+| 400 | `invalid-turns` |
 | 400 | `invalid-type` |
 | 400 | `invalid-value` |
 | 400 | `link-tag-not-allowed` |
@@ -592,6 +606,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `name-required` |
 | 400 | `not-a-baptism` |
 | 400 | `not-a-task` |
+| 400 | `not-an-image` |
 | 400 | `not-individual-or-family` |
 | 400 | `pair-invalid` |
 | 400 | `real-name-too-long` |
@@ -601,9 +616,9 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `title-missing` |
 | 400 | `too-many-results` |
 | 400 | `upload-failed` |
-| 400 | `weak-password` |
 | 400 | `xref-missing` |
 | 403 | `chart-disabled` |
+| 403 | `crop-locked` |
 | 403 | `fact-locked` |
 | 403 | `family-locked` |
 | 403 | `not-editable` |
@@ -614,7 +629,6 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 403 | `pair-expired` |
 | 403 | `pair-invalid` |
 | 403 | `private` |
-| 403 | `registration-disabled` |
 | 403 | `tree-disabled` |
 | 403 | `upload-not-allowed` |
 | 404 | `citation-not-found` |
@@ -633,7 +647,6 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 409 | `link-exists` |
 | 409 | `parent-exists` |
 | 409 | `pending-deletion` |
-| 429 | `rate-limited` |
 | 501 | `not-supported` |
 
 ## Performance
