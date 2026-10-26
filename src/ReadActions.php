@@ -135,6 +135,9 @@ trait ReadActions
                 'userName' => $user->userName(),
                 'realName' => $user->realName(),
                 'isAdmin'  => Auth::isAdmin($user),
+                // Ab Stufe n: die Sprache, die der Benutzer unter "Mein Konto" gewaehlt hat (de, en-GB ...) - damit eine App
+                // beim ersten Anmelden in ihr starten kann. Leer fuer Gaeste und ohne eigene Wahl.
+                'language' => Auth::check() ? $user->getPreference(UserInterface::PREF_LANGUAGE) : '',
             ],
             'trees'       => $trees,
             // Einstellungen der Seite "Anmelden"/"Neues Benutzerkonto anfordern" (Verwaltung > Website > Anmelden und Registrierung)
