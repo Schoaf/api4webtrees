@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+**Level n – `Info.user.language`:** the language the signed-in user chose under “My account” (`de`, `en-GB` …; empty for
+visitors and without a choice of their own) – so an app can start in the user's webtrees language on the first sign-in.
+
 **API levels 38 to 40.** **Level 38 – Crop of a media link** (GEDCOM 7 `2 CROP` with `TOP`, `LEFT`, `HEIGHT`, `WIDTH` in pixels): the part of
 an image that shows one person – each linked person can have their own part of the same group photo, the file stays
 unchanged. `Individual` gives each media entry `crop` (`{top, left, height, width}` or `null`); the new `POST MediaCrop`

@@ -1414,6 +1414,16 @@ class Schreiben(unittest.TestCase):
             adm.post("Reject", "testbaum", {}, xref="I1")
         self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
 
+    def test_sprache_des_kontos_in_info(self):
+        """Stufe n: Info.user.language ist die unter "Mein Konto" gewaehlte Sprache - leer fuer Gaeste."""
+        self.assertEqual("", U.sitzung().info()["user"]["language"])
+        user_id = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = 'mitglied'")[0][0]
+        try:
+            umgebung.sql("INSERT OR REPLACE INTO wt_user_setting (user_id, setting_name, setting_value) VALUES (?, 'language', 'nl')", user_id)
+            self.assertEqual("nl", U.sitzung("mitglied").info()["user"]["language"])
+        finally:
+            umgebung.sql("DELETE FROM wt_user_setting WHERE user_id = ? AND setting_name = 'language'", user_id)
+
     def test_anmeldeseite_in_info(self):
         """Stufe 26: Info.loginForm nennt Begruessungstext, Selbstregistrierung und Bedingungen - auch Gaesten."""
         def form():
