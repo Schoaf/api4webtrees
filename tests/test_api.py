@@ -1540,6 +1540,12 @@ class Schreiben(unittest.TestCase):
             seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
             self.assertNotIn("wtTux", seite)
             self.assertIn("wtWin", seite)
+            # Linux ohne freigeschaltete App: der Browser-Hinweis, die uebrigen Apps darunter
+            req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))
+            req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64)")
+            linux = s._senden(req).text
+            self.assertIn("noch kein eigenes Programm", linux)
+            self.assertIn("Weiter unten findest du Apps für andere Geräte", linux)
         finally:
             speichern(alle)
 
