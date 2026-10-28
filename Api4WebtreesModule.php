@@ -52,6 +52,7 @@ use function strtolower;
  * Aufgeteilt nach Aufgabe:
  *   src/Apps.php          die Apps, die das Modul kennt (wtAnd, wtWin, wtTux, ...) - neue kommen per Pull Request dazu
  *   src/AppPages.php      Einstellungen, Seite "App", Koppeln per Einmal-Code
+ *   src/OpenInApp.php     Links in der App oeffnen: Dialog bei Aufruf von aussen, Wahl je Browser im Cookie
  *   src/ReadActions.php   lesende JSON-Endpunkte (GET)
  *   src/WriteActions.php  schreibende JSON-Endpunkte (POST)
  *   src/PlaceActions.php  Orte: Ortsliste, ein Ort, Ortsdaten (_LOC) schreiben, Orte umbenennen und zusammenfuehren
@@ -72,6 +73,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use PlaceActions;
     use MergeActions;
     use TaskActions;
+    use OpenInApp;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
@@ -309,8 +311,16 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     {
         $tree = Validator::attributes($request)->treeOptional();
 
-        if ($tree === null || !Auth::check() || !$this->treeEnabled($tree)) {
+        if ($tree === null || !$this->treeEnabled($tree)) {
             return '';
+        }
+
+        // Von aussen geoeffnet: in der App oeffnen? (#22) - auch fuer Besucher, die App hat ihre eigene Anmeldung.
+        $offer = $this->openOffer($request);
+        $open  = $offer === null ? '' : view($this->name() . '::open-in-app', $offer);
+
+        if (!Auth::check()) {
+            return $open;
         }
 
         $action = (string) $request->getAttribute('action');
@@ -319,7 +329,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         // Der Hinweis wirbt fuer die App, die zum Geraet passt - gibt es keine (Mac, iPhone ohne passende App), keinen Hinweis.
         $hint_app = Apps::matching($apps, $device)[0] ?? ($device === 'other' ? Apps::kind($apps, 'phone')[0] ?? null : null);
 
-        return view($this->name() . '::footer', [
+        return $open . view($this->name() . '::footer', [
             'app_url'   => $this->actionUrl('App', $tree->name()),
             'hint'      => $hint_app !== null
                 && Auth::user()->getPreference(self::hintKey($request)) === '' && $action !== 'App' && $action !== 'Connect',
@@ -350,6 +360,13 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
+        // Android, Seite "immer in der App": gleich weiter (#22)
+        $open = $request->getAttribute('module') === null ? $this->openRedirect($request) : null;
+
+        if ($open !== null) {
+            return $open;
+        }
+
         if ($request->getAttribute('module') === $this->name()) {
             // Vom Verwalter nicht fuer die App freigegebene Baeume sind ueber dieses Modul gar nicht erreichbar -
             // unabhaengig davon, was das Konto in webtrees selbst duerfte.

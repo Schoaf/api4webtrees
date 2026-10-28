@@ -20,6 +20,8 @@ use Fisharebest\Webtrees\I18N;
  * @var bool                                                                    $https
  * @var bool                                                                    $home
  * @var int                                                                     $max_upload
+ * @var array<string,string>                                                    $open_areas    Bereich => Name (Links in der App oeffnen)
+ * @var list<string>                                                            $open_off      abgeschaltete Bereiche
  */
 
 ?>
@@ -91,6 +93,18 @@ use Fisharebest\Webtrees\I18N;
             </tr>
         <?php endforeach ?>
     </table>
+
+    <h2 class="h4"><?= I18N::translate('Links in der App öffnen') ?></h2>
+    <p><?= I18N::translate('Wird eine dieser Seiten von außen geöffnet – aus einer E-Mail, einem Chat, einem Lesezeichen –, bietet webtrees an, sie in einer App zu öffnen, die sie zeigen kann. Jeder Benutzer kann das auf der Seite „App“ für sein Gerät einstellen. Abgehakte Bereiche bleiben immer im Browser.') ?></p>
+    <div class="mb-3">
+        <input type="hidden" name="open_areas_form" value="1">
+        <?php foreach ($open_areas as $area => $name) : ?>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="open_areas[]" value="<?= e($area) ?>" id="open-<?= e($area) ?>" <?= in_array($area, $open_off, true) ? '' : 'checked' ?>>
+                <label class="form-check-label" for="open-<?= e($area) ?>"><?= e($name) ?></label>
+            </div>
+        <?php endforeach ?>
+    </div>
 
     <button type="submit" class="btn btn-primary mb-4"><?= I18N::translate('Speichern') ?></button>
 </form>
