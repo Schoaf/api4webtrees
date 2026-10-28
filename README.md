@@ -82,7 +82,7 @@ Signed-in users see a note at the top of the page with a button to the “App”
 Phone and PC are remembered separately: the note disappears for that kind of device once its app is connected (or when
 they click *Do not show again*); after that the links in the footer lead there. The page shows the apps for the
 visitor's device first (own apps before others); only that app is open, the rest is folded to one line each below, so the page stays short. On an iPhone or iPad it
-shows webtrees mobile by Andreas Scharf (App Store); a device without a matching app gets a note recommending the
+shows webtrees mobile by Andreas Scharf (App Store); a device without a matching app (none for it, or switched off in the settings) gets a note recommending the
 browser. Each app has two steps:
 
 1. **Install:** a button to the newest download (`.exe`, `.deb` or APK), for the phone also as a QR code.
