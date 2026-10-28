@@ -196,17 +196,20 @@ $pc = static function (array $app) use ($base_url, $secure, $home, $logged_in, $
     <?php
 };
 
-// Apple-Geraet ohne passende App (heute iPhone und iPad): ehrlich sagen, statt die Android-App zu zeigen.
-$apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static fn (array $app): bool => $app['matches']) === [];
+// Fuer dieses Geraet ist keine App freigeschaltet: den Browser empfehlen, die uebrigen Apps stehen darunter.
+$none = Apps::matching($apps, $device) === [];
 
 ?>
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
-<?php if ($apple) : ?>
+<?php if ($none) : ?>
     <div class="alert alert-info">
         <strong><?= I18N::translate('Für dieses Gerät gibt es noch kein eigenes Programm.') ?></strong><br>
-        <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Computer oder ein Android-Handy, findest du die Programme darunter.') ?>
+        <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät.') ?>
+        <?php if ($apps !== []) : ?>
+            <?= I18N::translate('Weiter unten findest du Apps für andere Geräte.') ?>
+        <?php endif ?>
     </div>
 <?php endif ?>
 
