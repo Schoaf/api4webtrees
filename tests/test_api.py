@@ -1546,6 +1546,85 @@ class Schreiben(unittest.TestCase):
         seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
         self.assertIn("wtTux", seite)
 
+    def test_links_in_der_app_oeffnen(self):
+        """Eine Seite, die eine App zeigen kann, von aussen geoeffnet: die Fusszeile bietet die App an (#22)."""
+        IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
+        ANDROID = "Mozilla/5.0 (Linux; Android 14) Mobile"
+
+        def seite(s, user_agent, route="/tree/testbaum/individual/I1", von="none"):
+            adresse = s.url(route)
+            # webtrees leitet auf die Adresse mit dem Namen um (301) - wie ein Browser folgen
+            for _ in range(2):
+                req = urllib.request.Request(adresse)
+                req.add_header("User-Agent", user_agent)
+                req.add_header("Sec-Fetch-Site", von)
+                antwort = s._senden(req)
+                if antwort.status != 301:
+                    return antwort
+                adresse = urllib.parse.urljoin(adresse, antwort.umleitung)
+            return antwort
+
+        def formular(s, aktion, felder, baum=None):
+            route = f"/module/_api4webtrees_/{aktion}" + (f"/{baum}" if baum else "")
+            daten = urllib.parse.urlencode({"_csrf": s.csrf, **felder}).encode()
+            req = urllib.request.Request(s.url(route), data=daten, method="POST")
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            return s._senden(req)
+
+        # iPhone: webtrees mobile mit seinem Schema - je Sitzung nur einmal
+        s = U.sitzung("admin")
+        erste = seite(s, IPHONE).text
+        self.assertIn("wt-open-in-app", erste)
+        self.assertIn("webtreesmobile:\\/\\/open?url=", erste)
+        self.assertNotIn("wt-open-in-app", seite(s, IPHONE).text)
+
+        # Innerhalb von webtrees weitergeklickt: nichts
+        self.assertNotIn("wt-open-in-app", seite(U.sitzung("admin"), IPHONE, von="same-origin").text)
+        # Android: intent:// mit Paket, Chrome faellt ohne App auf den Store zurueck
+        android = seite(U.sitzung("admin"), ANDROID).text
+        self.assertIn("intent:\\/\\/open?url=", android)
+        self.assertIn("package=net.webtrees.webtreesmobile", android)
+        # Keine App fuer diesen Bereich (Familie) oder dieses Geraet (Mac): nichts
+        self.assertNotIn("wt-open-in-app", seite(U.sitzung("admin"), IPHONE, route="/tree/testbaum/family/F1").text)
+        self.assertNotIn("wt-open-in-app", seite(U.sitzung("admin"), "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)").text)
+
+        # "Im Browser bleiben" gemerkt: nie mehr
+        s = U.sitzung("admin")
+        self.assertEqual(200, formular(s, "OpenChoice", {"never": "1"}).status)
+        self.assertNotIn("wt-open-in-app", seite(s, IPHONE).text)
+
+        # App gemerkt: iPhone oeffnet sie gleich, Android per Umleitung
+        s = U.sitzung("admin")
+        formular(s, "OpenChoice", {"app": "webtrees-mobile"})
+        self.assertIn("Wird in webtrees mobile geöffnet", seite(s, IPHONE).text)
+        s = U.sitzung("admin")
+        formular(s, "OpenChoice", {"app": "webtrees-mobile"})
+        umleitung = seite(s, ANDROID)
+        self.assertEqual(302, umleitung.status)
+        self.assertTrue(umleitung.umleitung.startswith("intent://open?url="), umleitung.umleitung)
+        self.assertIn("open-stay%3D1", umleitung.umleitung)
+
+        # Seite "App": die Einstellungen; Personen auf "nie" - dann kein Angebot mehr
+        s = U.sitzung("admin")
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-in": "webtrees-mobile"}))
+        req.add_header("User-Agent", IPHONE)
+        app = s._senden(req).text
+        self.assertIn("Links in der App öffnen", app)
+        self.assertIn("Ja, immer in webtrees mobile öffnen", app)
+        self.assertIn('name="mode-individual"', app)
+        self.assertNotIn('name="mode-family"', app)
+        gespeichert = formular(s, "OpenSettings", {"app": "webtrees-mobile", "mode-individual": "never"}, "testbaum")
+        self.assertIn(gespeichert.status, (302, 303))
+        self.assertNotIn("wt-open-in-app", seite(s, IPHONE).text)
+
+        # Aus der App eingerichtet: alles immer, dann der Knopf zurueck in die App
+        s = U.sitzung("admin")
+        zurueck = formular(s, "OpenSettings", {"on": "1", "app": "webtrees-mobile", "all": "always"}, "testbaum")
+        self.assertIn("open-done=webtrees-mobile", zurueck.umleitung)
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-done": "webtrees-mobile"}))
+        req.add_header("User-Agent", IPHONE)
+        self.assertIn("webtreesmobile://open-in?result=on", s._senden(req).text)
+
     def test_ungueltiger_koppelcode(self):
         s = U.sitzung()
         a = s.post("Pair", None, {"code": "0" * 48})

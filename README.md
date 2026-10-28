@@ -73,6 +73,9 @@ for any user, whatever their rights in webtrees. Default: all trees.
 **Apps:** the apps the module knows (wtAnd, wtWin, wtTux, wtMac, webtrees mobile for iPhone and iPad, and any added by pull request), each with a tick. Unticked apps
 disappear from the “App” page, the note and the footer. Default: all on. See [Apps on the “App” page](#apps-on-the-app-page).
 
+**Open links in the app:** the areas (individuals, families, media, charts) whose pages are offered to an app when
+opened from outside. Unticked areas always stay in the browser. Default: all on. See [Open links in the app](#open-links-in-the-app).
+
 ![Settings page: install the app, family trees for the app, apps, status](docs/einstellungen.png)
 
 ## For users: the “App” page
@@ -99,6 +102,18 @@ The one-time code is shown only to the signed-in user, is valid for 10 minutes a
 https – or over http inside the home network (private addresses, `.local`, `.lan`, `.fritz.box` …), the same rule by which
 the apps accept http. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in
 webtrees that switches off the whole module, including the API.
+
+### Open links in the app
+
+When a page that an app can show is opened from outside – from an e-mail, a chat, a bookmark –, a box at the bottom
+offers to open it in the app, with *Remember my choice*. Clicking through webtrees never asks, and it asks once per
+session. On Android the app opens via `intent://`: without the app installed, Chrome goes to the store instead of
+showing an error. Elsewhere, if the page is still there after 2 seconds, the box shows where to install the app
+(Safari's own error for an unknown address can't be suppressed). Safari also asks before it opens any app.
+
+On the “App” page each user sets this for their browser: on or off, and under *More options* per area *ask*
+(default), *always* or *never*. The choice is a cookie set by the server; the server stores nothing. With *always*,
+Android goes straight to the app; the browser stays on the page if the app is missing.
 
 ## Privacy and permissions
 
@@ -209,6 +224,12 @@ The contract for one-tap connecting is the one wtAnd uses:
    `X-CSRF-TOKEN` and body `{"code": "<code>"}` – like every other POST. Answer: `{"ok":true,"tree":"…","user":"…"}` – the session
    is now signed in as that user – or `{"ok":false,"error":"pair-invalid"|"pair-expired"}`.
 3. The rules for the code are those [above](#for-users-the-app-page), whichever app redeems it.
+
+To open pages (see [Open links in the app](#open-links-in-the-app)), an app lists the areas it can show in `open`
+(`individual`, `family`, `media`, `chart`) and, on Android, its package in `package`. It then accepts
+`<scheme>://open?url=<page URL>` – the full webtrees address of the page, which the app maps to its own screen. To set it
+up from the app, open `…/App/{tree}?open-in=<app id>` in the browser; after the user agrees, the page offers a button
+back to `<scheme>://open-in?result=on`.
 
 ### Reading (GET)
 

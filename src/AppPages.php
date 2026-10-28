@@ -27,6 +27,7 @@ use function http_build_query;
 use function implode;
 use function in_array;
 use function filter_var;
+use function array_diff;
 use function array_keys;
 use function ini_get;
 use function intdiv;
@@ -98,6 +99,8 @@ trait AppPages
             'https'        => str_starts_with($base_url, 'https://'),
             'home'         => self::homeNetworkUrl($base_url),
             'max_upload'   => $this->maxUploadBytes(),
+            'open_areas'   => self::openAreaNames(),
+            'open_off'     => $this->openAreasOff(),
         ]);
     }
 
@@ -126,6 +129,13 @@ trait AppPages
         }
 
         $this->setPreference(self::APPS_OFF_SETTING, implode(',', $off));
+
+        // Links in der App oeffnen: angekreuzte Bereiche sind an, gespeichert werden die abgeschalteten. Nur, wenn das
+        // Formular die Bereiche hat (open_areas_form) - nicht angekreuzt hiesse sonst auch "nicht mitgeschickt".
+        if (Validator::parsedBody($request)->string('open_areas_form', '') === '1') {
+            $areas_on = Validator::parsedBody($request)->array('open_areas');
+            $this->setPreference(self::OPEN_AREAS_OFF_SETTING, implode(',', array_diff(Apps::AREAS, $areas_on)));
+        }
 
         FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
 
@@ -198,6 +208,7 @@ trait AppPages
             'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
             'deep'         => $deep,
             'minutes'      => intdiv(self::PAIR_SECONDS, 60),
+            'open'         => $this->openSettings($request, $device, $tree?->name()),
         ]);
     }
 

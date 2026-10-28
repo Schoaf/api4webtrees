@@ -7,6 +7,7 @@ namespace Api4Webtrees;
 use function array_filter;
 use function array_keys;
 use function array_merge;
+use function array_diff;
 use function array_values;
 use function implode;
 use function in_array;
@@ -36,6 +37,10 @@ use function str_starts_with;
  *   asset     nur pc: Muster des Dateinamens im GitHub-Release (die Seite "App" sucht die neueste Datei per API)
  *   always    auf jedem Geraet aufgeklappt zeigen (sonst nur auf den passenden, anderswo als eine Zeile eingeklappt).
  *             Zurzeit nirgends gesetzt: pro Geraet ist eine App offen, die Seite bleibt kurz.
+ *   open      Seiten, die die App selbst zeigen kann (Bereiche aus AREAS) - ein Link auf so eine Seite wird ihr dann
+ *             angeboten: <scheme>://open?url=<Adresse der Seite>. Leer = die App oeffnet keine Seiten.
+ *   package   Paketname je Geraet, zurzeit nur android: Chrome oeffnet die App dann per intent:// und faellt ohne
+ *             installierte App auf den Store zurueck, statt einen Fehler zu zeigen. Leer = nur das Schema.
  *
  * Reihenfolge auf der Seite "App": Apps fuer das Geraet des Besuchers zuerst, dabei die eigenen (OWNER) vor
  * fremden; danach die uebrigen. Die Reihenfolge hier in der Liste bleibt innerhalb jeder Gruppe erhalten - wtWin
@@ -49,7 +54,10 @@ final class Apps
     public const array DEVICES = ['android', 'ios', 'windows', 'linux', 'mac'];
 
     /** Die Felder jedes Eintrags, in dieser Reihenfolge (siehe oben). */
-    private const array FIELDS = ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'icon', 'asset', 'always'];
+    private const array FIELDS = ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'icon', 'asset', 'always', 'open', 'package'];
+
+    /** Bereiche von webtrees, die eine App statt des Browsers zeigen kann (Feld open). */
+    public const array AREAS = ['individual', 'family', 'media', 'chart'];
 
     /** @var array<string,array<string,mixed>> */
     public const array ALL = [
@@ -64,6 +72,8 @@ final class Apps
             'icon'     => 'wt-apps.png',
             'asset'    => '\\.exe$',
             'always'   => false,
+            'open'     => [],
+            'package'  => [],
         ],
         'wtand' => [
             'name'     => 'wtAnd',
@@ -76,6 +86,8 @@ final class Apps
             'icon'     => 'wt-apps.png',
             'asset'    => '',
             'always'   => false,
+            'open'     => [],
+            'package'  => [],
         ],
         'wttux' => [
             'name'     => 'wtTux',
@@ -88,6 +100,8 @@ final class Apps
             'icon'     => 'wt-apps.png',
             'asset'    => '_amd64\\.deb$',
             'always'   => false,
+            'open'     => [],
+            'package'  => [],
         ],
         // Testfassung: baut wie wtWin/wtTux aus demselben Code, ist aber noch nicht auf einem echten Mac geprueft.
         'wtmac' => [
@@ -101,6 +115,8 @@ final class Apps
             'icon'     => 'wt-apps.png',
             'asset'    => '-arm64\\.dmg$',
             'always'   => false,
+            'open'     => [],
+            'package'  => [],
         ],
         'webtrees-mobile' => [
             'name'     => 'webtrees mobile',
@@ -113,6 +129,8 @@ final class Apps
             'icon'     => 'webtrees-mobile.png',
             'asset'    => '',
             'always'   => false,
+            'open'     => ['individual', 'chart'],
+            'package'  => ['android' => 'net.webtrees.webtreesmobile'],
         ],
     ];
 
@@ -264,6 +282,16 @@ final class Apps
 
                 if (preg_match('/^[a-z0-9-]+\.(svg|png)$/', $file) !== 1 || !is_file(__DIR__ . '/../resources/img/' . $file)) {
                     $errors[] = "$id: Badge $file fehlt unter resources/img";
+                }
+            }
+
+            if (array_diff($app['open'], self::AREAS) !== [] || ($app['open'] !== [] && $app['scheme'] === '')) {
+                $errors[] = "$id: open nur aus " . implode(', ', self::AREAS) . ', und nur mit scheme';
+            }
+
+            foreach ($app['package'] as $device => $package) {
+                if ($device !== 'android' || !in_array($device, $app['devices'], true) || preg_match('/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/', $package) !== 1) {
+                    $errors[] = "$id: package nur fuer android, als Paketname (net.example.app)";
                 }
             }
 

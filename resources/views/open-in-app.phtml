@@ -1,0 +1,107 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * Links in der App oeffnen (#22): unten auf einer Seite, die von aussen geoeffnet wurde. Fragt, oder oeffnet bei
+ * "immer" gleich die gewaehlte App. Oeffnet sich die App nicht (nicht installiert), steht danach der Weg zum Store da.
+ *
+ * @var list<array{id:string,name:string,link:string,store:string,badge:string,icon:string,intent:bool}> $offers
+ * @var bool   $always      die Wahl ist "immer": nur eine App, sie oeffnet sich von selbst
+ * @var string $choice_url  POST: "Auswahl merken"
+ * @var string $app_url     Seite "App" mit den Einstellungen
+ */
+
+$json = static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+?>
+<div class="card shadow position-fixed bottom-0 start-50 translate-middle-x mb-3 wt-open-in-app" style="z-index: 1080; width: min(28rem, calc(100% - 1rem));" role="dialog" aria-labelledby="wt-open-in-app-title">
+    <div class="card-body">
+        <?php if ($always) : ?>
+            <p class="mb-2" id="wt-open-in-app-title"><?= I18N::translate('Wird in %s geöffnet …', e($offers[0]['name'])) ?></p>
+        <?php else : ?>
+            <p class="fw-bold mb-2" id="wt-open-in-app-title"><?= I18N::translate('Diese Seite in der App öffnen?') ?></p>
+            <?php foreach ($offers as $offer) : ?>
+                <button type="button" class="btn btn-primary w-100 mb-2 d-flex align-items-center justify-content-center gap-2" data-open-app="<?= e($offer['id']) ?>">
+                    <?php if ($offer['icon'] !== '') : ?>
+                        <img src="<?= e($offer['icon']) ?>" alt="" style="height: 1.5rem; border-radius: .3rem;">
+                    <?php endif ?>
+                    <?= I18N::translate('In %s öffnen', e($offer['name'])) ?>
+                </button>
+            <?php endforeach ?>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="wt-open-in-app-remember">
+                <label class="form-check-label" for="wt-open-in-app-remember"><?= I18N::translate('Auswahl merken') ?></label>
+            </div>
+        <?php endif ?>
+
+        <div class="d-none" data-open-missing>
+            <p class="small mb-2"><?= I18N::translate('Hat sich die App nicht geöffnet? Hier kannst du sie installieren:') ?></p>
+            <?php foreach ($offers as $offer) : ?>
+                <a href="<?= e($offer['store']) ?>" class="d-none me-2" data-open-store="<?= e($offer['id']) ?>">
+                    <?php if ($offer['badge'] !== '') : ?>
+                        <img src="<?= e($offer['badge']) ?>" alt="<?= e($offer['name']) ?>" style="height: 2.5rem;">
+                    <?php else : ?>
+                        <span class="btn btn-outline-primary btn-sm"><?= I18N::translate('%s herunterladen', e($offer['name'])) ?></span>
+                    <?php endif ?>
+                </a>
+            <?php endforeach ?>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-1">
+            <a class="small" href="<?= e($app_url) ?>" rel="nofollow"><?= I18N::translate('Einstellungen') ?></a>
+            <button type="button" class="btn btn-link btn-sm" data-open-stay><?= I18N::translate('Im Browser bleiben') ?></button>
+        </div>
+    </div>
+</div>
+<script>
+  (function () {
+    var box      = document.currentScript.previousElementSibling;
+    var offers   = <?= $json($offers) ?>;
+    var remember = box.querySelector('#wt-open-in-app-remember');
+    var missing  = box.querySelector('[data-open-missing]');
+
+    // "Auswahl merken": der Server setzt das Cookie. keepalive - die Anfrage kommt auch an, wenn die Seite weitergeht.
+    var save = function (fields) {
+      if (!remember || !remember.checked || !window.fetch) { return; }
+      var body = new URLSearchParams(fields);
+      body.set('_csrf', <?= $json(csrf_token()) ?>);
+      fetch(<?= $json($choice_url) ?>, { method: 'POST', body: body, keepalive: true, credentials: 'same-origin' });
+    };
+
+    // Oeffnen. Android mit Paketname: intent:// - Chrome faellt ohne App selbst auf den Store zurueck. Sonst das Schema:
+    // geht die Seite nicht binnen 2 s in den Hintergrund, hat sich keine App geoeffnet - dann der Weg zum Store.
+    var open = function (offer) {
+      var gone = false;
+      var away = function () { if (document.hidden) { gone = true; } };
+      document.addEventListener('visibilitychange', away);
+      window.addEventListener('pagehide', function () { gone = true; });
+      window.location.href = offer.link;
+      if (offer.intent) { return; }
+      window.setTimeout(function () {
+        if (gone || document.hidden) { return; }
+        missing.classList.remove('d-none');
+        box.querySelector('[data-open-store="' + offer.id + '"]').classList.remove('d-none');
+      }, 2000);
+    };
+
+    box.querySelectorAll('[data-open-app]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var offer = offers.filter(function (o) { return o.id === button.getAttribute('data-open-app'); })[0];
+        save({ app: offer.id });
+        open(offer);
+      });
+    });
+
+    box.querySelector('[data-open-stay]').addEventListener('click', function () {
+      save({ never: '1' });
+      box.remove();
+    });
+
+    <?php if ($always) : ?>
+    open(offers[0]);
+    <?php endif ?>
+  })();
+</script>

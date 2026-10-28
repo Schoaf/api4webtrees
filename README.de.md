@@ -74,6 +74,10 @@ für keinen Benutzer und unabhängig von seinen Rechten in webtrees. Standard: a
 Abgehakte verschwinden von der Seite „App“, aus dem Hinweis und der Fußzeile. Standard: alle an. Siehe
 [Apps auf der Seite „App“](#apps-auf-der-seite-app).
 
+**Links in der App öffnen:** die Bereiche (Personen, Familien, Medien, Diagramme), deren Seiten einer App angeboten
+werden, wenn sie von außen geöffnet werden. Abgehakte bleiben immer im Browser. Standard: alle an. Siehe
+[Links in der App öffnen](#links-in-der-app-öffnen).
+
 ![Einstellungsseite: App installieren, Stammbäume für die App, Apps, Status](docs/einstellungen.png)
 
 ## Für Benutzer: die Seite „App“
@@ -100,6 +104,19 @@ Der Einmal-Code wird nur dem angemeldeten Benutzer gezeigt, gilt 10 Minuten und 
 angeboten – oder über http im Heimnetz (private Adressen, `.local`, `.lan`, `.fritz.box` …), nach derselben Regel, nach
 der die Apps http zulassen. Gespeichert wird nur sein Hash. Das Modul nicht unter *Verwaltung → Module → Fußzeilen*
 abschalten: Das schaltet in webtrees das ganze Modul ab, samt Schnittstelle.
+
+### Links in der App öffnen
+
+Wird eine Seite, die eine App zeigen kann, von außen geöffnet – aus einer E-Mail, einem Chat, einem Lesezeichen –,
+bietet unten ein Kasten an, sie in der App zu öffnen, mit *Auswahl merken*. Beim Weiterklicken in webtrees fragt er
+nie, und je Sitzung nur einmal. Auf Android öffnet sich die App per `intent://`: Ohne App geht Chrome in den Store statt
+einer Fehlermeldung. Anderswo zeigt der Kasten, wo es die App gibt, wenn die Seite nach 2 Sekunden noch da ist (die
+eigene Fehlermeldung von Safari für eine unbekannte Adresse lässt sich nicht unterdrücken). Safari fragt außerdem
+selbst, bevor es eine App öffnet.
+
+Auf der Seite „App“ stellt jeder Benutzer das für seinen Browser ein: an oder aus, und unter *Weitere Optionen* je
+Bereich *Nachfragen* (Standard), *Immer* oder *Nie*. Die Wahl ist ein Cookie, das der Server setzt; gespeichert wird auf
+dem Server nichts. Mit *Immer* geht Android gleich in die App; fehlt sie, bleibt der Browser auf der Seite.
 
 ## Datenschutz und Rechte
 
@@ -170,6 +187,12 @@ ab. Verwalter können jede App in den Einstellungen abhaken. Der Vertrag fürs K
 in der App. Die App holt sich mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN`
 und Rumpf `{"code": "…"}`; Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer
 angemeldet. Für den Code gelten die Regeln [oben](#für-benutzer-die-seite-app), egal welche App ihn einlöst.
+
+Um Seiten zu öffnen (siehe [Links in der App öffnen](#links-in-der-app-öffnen)), nennt eine App in `open` die Bereiche,
+die sie zeigen kann (`individual`, `family`, `media`, `chart`), und auf Android in `package` ihr Paket. Sie nimmt dann
+`<schema>://open?url=<Adresse der Seite>` an – die volle webtrees-Adresse, die sie auf ihre eigene Ansicht abbildet.
+Einrichten aus der App: `…/App/{baum}?open-in=<App-Kennung>` im Browser öffnen; nach der Zustimmung bietet die Seite
+einen Knopf zurück zu `<schema>://open-in?result=on`.
 
 Einstieg in den Quelltext ist der Kopf von `Api4WebtreesModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.

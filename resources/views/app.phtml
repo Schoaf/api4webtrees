@@ -21,6 +21,7 @@ use Fisharebest\Webtrees\I18N;
  * @var int                               $minutes
  * @var string                            $device        windows, linux, mac, android, ios, other
  * @var string                            $base_url
+ * @var array<string,mixed>|null          $open          Links in der App oeffnen (OpenInApp::openSettings), null ohne passende App
  */
 
 $json = static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -203,6 +204,26 @@ $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static f
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
+<?php if ($open !== null && $open['done_app'] !== null) : ?>
+    <div class="alert alert-success d-flex flex-wrap align-items-center gap-2">
+        <span class="me-auto"><?= I18N::translate('Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt in %s.', e($open['done_app']['name'])) ?></span>
+        <a class="btn btn-primary" href="<?= e($open['done_url']) ?>"><?= I18N::translate('Zurück zu %s', e($open['done_app']['name'])) ?></a>
+    </div>
+<?php elseif ($open !== null && $open['open_in'] !== null) : ?>
+    <?php /* Aus der App heraus geoeffnet (?open-in=<Kennung>): einmal fragen, dann zurueck in die App. */ ?>
+    <div class="alert alert-primary">
+        <p class="fw-bold"><?= I18N::translate('Links zu diesem Stammbaum auf diesem Gerät immer in %s öffnen?', e($open['open_in']['name'])) ?></p>
+        <p class="small"><?= I18N::translate('Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, zeigt sie dann %s statt des Browsers. Das gilt für diesen Browser; ändern kannst du es unten auf dieser Seite.', e($open['open_in']['name'])) ?></p>
+        <form method="post" action="<?= e($open['save_url']) ?>" class="d-inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="on" value="1">
+            <input type="hidden" name="app" value="<?= e($open['open_in']['id']) ?>">
+            <input type="hidden" name="all" value="always">
+            <button type="submit" class="btn btn-primary"><?= I18N::translate('Ja, immer in %s öffnen', e($open['open_in']['name'])) ?></button>
+        </form>
+    </div>
+<?php endif ?>
+
 <?php if ($apple) : ?>
     <div class="alert alert-info">
         <strong><?= I18N::translate('Für dieses Gerät gibt es noch kein eigenes Programm.') ?></strong><br>
@@ -222,6 +243,50 @@ $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static f
         </details>
     <?php endif ?>
 <?php endforeach ?>
+
+<?php if ($open !== null) : ?>
+    <h3 class="h4 mt-4" id="open-in-app"><?= I18N::translate('Links in der App öffnen') ?></h3>
+    <form method="post" action="<?= e($open['save_url']) ?>">
+        <?= csrf_field() ?>
+        <?php if (!$open['choice']['on']) : ?>
+            <p><?= I18N::translate('Links zu diesem Stammbaum öffnen sich in diesem Browser immer im Browser.') ?></p>
+            <button type="submit" name="on" value="1" class="btn btn-primary"><?= I18N::translate('In der App öffnen einschalten') ?></button>
+        <?php else : ?>
+            <p><?= I18N::translate('Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, fragt webtrees, ob sie in der App geöffnet werden soll. Die Einstellung gilt für diesen Browser.') ?></p>
+            <details class="mb-3">
+                <summary><?= I18N::translate('Weitere Optionen') ?></summary>
+                <div class="mt-3" style="max-width: 30rem;">
+                    <?php if (count($open['apps']) > 1) : ?>
+                        <label class="form-label" for="open-app"><?= I18N::translate('App') ?></label>
+                        <select class="form-select mb-3" name="app" id="open-app">
+                            <?php foreach ($open['apps'] as $open_app) : ?>
+                                <option value="<?= e($open_app['id']) ?>" <?= $open_app['id'] === $open['choice']['app'] ? 'selected' : '' ?>><?= e($open_app['name']) ?></option>
+                            <?php endforeach ?>
+                        </select>
+                    <?php else : ?>
+                        <input type="hidden" name="app" value="<?= e($open['apps'][0]['id']) ?>">
+                    <?php endif ?>
+                    <table class="table table-sm align-middle">
+                        <?php foreach ($open['areas'] as $area => $area_name) : ?>
+                            <tr>
+                                <th scope="row"><label for="open-mode-<?= e($area) ?>"><?= e($area_name) ?></label></th>
+                                <td>
+                                    <select class="form-select form-select-sm" name="mode-<?= e($area) ?>" id="open-mode-<?= e($area) ?>">
+                                        <?php foreach (['ask' => I18N::translate('Nachfragen'), 'always' => I18N::translate('Immer in der App'), 'never' => I18N::translate('Nie, im Browser bleiben')] as $mode => $mode_name) : ?>
+                                            <option value="<?= e($mode) ?>" <?= $open['choice']['modes'][$area] === $mode ? 'selected' : '' ?>><?= e($mode_name) ?></option>
+                                        <?php endforeach ?>
+                                    </select>
+                                </td>
+                            </tr>
+                        <?php endforeach ?>
+                    </table>
+                    <button type="submit" class="btn btn-primary btn-sm"><?= I18N::translate('Speichern') ?></button>
+                </div>
+            </details>
+            <button type="submit" name="on" value="0" class="btn btn-outline-secondary btn-sm"><?= I18N::translate('Ausschalten – immer im Browser') ?></button>
+        <?php endif ?>
+    </form>
+<?php endif ?>
 
 <p class="text-muted small mt-4"><?= I18N::translate('Alle Apps auf dieser Seite sprechen mit diesem Server über das webtrees-Modul %s.', '<a href="https://github.com/thobgg/api4webtrees" target="_blank" rel="noopener">api4webtrees</a>') ?></p>
 
