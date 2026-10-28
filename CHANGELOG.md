@@ -4,6 +4,8 @@
 **“App” page:** the note recommending the browser now shows on every device without an app the administrator left on
 (before only on Apple devices). It no longer names a computer or an Android phone, which may be switched off too, but
 points to the apps for other devices – and only if there are any.
+**Level n – `Info.user.language`:** the language the signed-in user chose under “My account” (`de`, `en-GB` …; empty for
+visitors and without a choice of their own) – so an app can start in the user's webtrees language on the first sign-in.
 
 **API levels 38 to 40.** **Level 38 – Crop of a media link** (GEDCOM 7 `2 CROP` with `TOP`, `LEFT`, `HEIGHT`, `WIDTH` in pixels): the part of
 an image that shows one person – each linked person can have their own part of the same group photo, the file stays
