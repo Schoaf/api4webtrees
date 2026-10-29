@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+**Store badges:** the Google Play badge had a transparent margin of a sixth on every side and looked smaller than the
+App Store badge at the same height; it now has none, and both are equally high.
+
 **“App” page:** the note recommending the browser now shows on every device without an app the administrator left on
 (before only on Apple devices). It no longer names a computer or an Android phone, which may be switched off too, but
 points to the apps for other devices – and only if there are any.
