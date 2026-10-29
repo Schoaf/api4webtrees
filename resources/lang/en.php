@@ -122,4 +122,8 @@ return [
     'Nie in der App öffnen' => 'Never open in the app',
     'Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, kann webtrees sie in der App öffnen. Die Einstellung gilt für diesen Browser.' => 'When you open a page from outside – from an e-mail, a chat, a bookmark –, webtrees can open it in the app. The setting applies to this browser.',
     self::DESCRIPTION => 'JSON interface for the apps wtAnd, wtWin and wtTux – and any other client. Reads and writes with the rights of the signed-in user.',
+    'Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt im Browser.' => 'Links to this family tree now open in the browser on this device.',
+    'Zurzeit: eingeschaltet.' => 'Currently: on.',
+    'Zurzeit: ausgeschaltet.' => 'Currently: off.',
+    'Deaktivieren' => 'Turn off',
 ];

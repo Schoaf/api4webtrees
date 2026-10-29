@@ -122,4 +122,8 @@ return [
     'Nie in der App öffnen' => 'Nooit in de app openen',
     'Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, kann webtrees sie in der App öffnen. Die Einstellung gilt für diesen Browser.' => 'Opent u een pagina van buitenaf – vanuit een e-mail, een chat, een bladwijzer –, dan kan webtrees haar in de app openen. De instelling geldt voor deze browser.',
     self::DESCRIPTION => 'JSON-interface voor de apps wtAnd, wtWin en wtTux – en elke andere client. Leest en schrijft met de rechten van de aangemelde gebruiker.',
+    'Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt im Browser.' => 'Links naar deze stamboom openen nu op dit apparaat in de browser.',
+    'Zurzeit: eingeschaltet.' => 'Momenteel: aan.',
+    'Zurzeit: ausgeschaltet.' => 'Momenteel: uit.',
+    'Deaktivieren' => 'Uitschakelen',
 ];

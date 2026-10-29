@@ -358,10 +358,16 @@ trait OpenInApp
             $choice['modes'][$area] = in_array($mode, self::OPEN_MODES, true) ? $mode : 'ask';
         }
 
-        // Aus der App eingerichtet: alles immer in dieser App, dann zurueck auf die Seite mit dem Knopf zur App.
-        if ($body->string('all', '') === 'always') {
-            $choice['modes'] = array_fill_keys(Apps::AREAS, 'always');
-            $back           .= (str_contains($back, '?') ? '&' : '?') . http_build_query(['open-done' => $choice['app']]);
+        // Aus der App eingerichtet: alles immer in dieser App bzw. ausgeschaltet, dann zurueck auf die Seite mit dem
+        // Knopf zur App.
+        $all = $body->string('all', '');
+
+        if ($all === 'always' || $all === 'off') {
+            if ($all === 'always') {
+                $choice['modes'] = array_fill_keys(Apps::AREAS, 'always');
+            }
+
+            $back .= (str_contains($back, '?') ? '&' : '?') . http_build_query(['open-done' => $choice['app'], 'open-result' => $choice['on'] ? 'on' : 'off']);
         }
 
         FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
@@ -395,6 +401,9 @@ trait OpenInApp
         $query    = Validator::queryParams($request);
         $open_in  = array_values(array_filter($apps, static fn (array $app): bool => $app['id'] === $query->string('open-in', '')))[0] ?? null;
         $done     = array_values(array_filter($apps, static fn (array $app): bool => $app['id'] === $query->string('open-done', '')))[0] ?? null;
+        $is_on    = $query->string('open-result', 'on') !== 'off';
+        $is_set   = $open_in !== null && $choice['on'] && $choice['app'] === $open_in['id']
+            && array_filter($open_in['open'], static fn (string $area): bool => $choice['modes'][$area] !== 'always') === [];
 
         return [
             'apps'     => $apps,
@@ -402,8 +411,10 @@ trait OpenInApp
             'areas'    => $areas,
             'save_url' => $this->actionUrl('OpenSettings', $tree),
             'open_in'  => $open_in,
-            'done_url' => $done === null ? '' : $done['scheme'] . '://' . self::OPEN_DONE_PATH . 'on',
+            'done_url' => $done === null ? '' : $done['scheme'] . '://' . self::OPEN_DONE_PATH . ($is_on ? 'on' : 'off'),
             'done_app' => $done,
+            'done_on'  => $is_on,
+            'is_set'   => $is_set,
         ];
     }
 }

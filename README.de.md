@@ -191,8 +191,8 @@ angemeldet. Für den Code gelten die Regeln [oben](#für-benutzer-die-seite-app)
 Um Seiten zu öffnen (siehe [Links in der App öffnen](#links-in-der-app-öffnen)), nennt eine App in `open` die Bereiche,
 die sie zeigen kann (`individual`, `family`, `media`, `chart`), und auf Android in `package` ihr Paket. Sie nimmt dann
 `<schema>://open?url=<Adresse der Seite>` an – die volle webtrees-Adresse, die sie auf ihre eigene Ansicht abbildet.
-Einrichten aus der App: `…/App/{baum}?open-in=<App-Kennung>` im Browser öffnen; nach der Zustimmung bietet die Seite
-einen Knopf zurück zu `<schema>://open-in?result=on`.
+Einrichten aus der App: `…/App/{baum}?open-in=<App-Kennung>` im Browser öffnen; die Seite zeigt, ob es eingeschaltet
+ist, bietet Ein- und Ausschalten und danach einen Knopf zurück zu `<schema>://open-in?result=on` (bzw. `off`).
 
 Einstieg in den Quelltext ist der Kopf von `Api4WebtreesModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.

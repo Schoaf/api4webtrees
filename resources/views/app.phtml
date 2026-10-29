@@ -206,13 +206,14 @@ $none = Apps::matching($apps, $device) === [];
 
 <?php if ($open !== null && $open['done_app'] !== null) : ?>
     <div class="alert alert-success d-flex flex-wrap align-items-center gap-2">
-        <span class="me-auto"><?= I18N::translate('Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt in %s.', e($open['done_app']['name'])) ?></span>
+        <span class="me-auto"><?= $open['done_on'] ? I18N::translate('Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt in %s.', e($open['done_app']['name'])) : I18N::translate('Links zu diesem Stammbaum öffnen sich auf diesem Gerät jetzt im Browser.') ?></span>
         <a class="btn btn-primary" href="<?= e($open['done_url']) ?>"><?= I18N::translate('Zurück zu %s', e($open['done_app']['name'])) ?></a>
     </div>
 <?php elseif ($open !== null && $open['open_in'] !== null) : ?>
     <?php /* Aus der App heraus geoeffnet (?open-in=<Kennung>): einmal fragen, dann zurueck in die App. */ ?>
     <div class="alert alert-primary">
         <p class="fw-bold"><?= I18N::translate('Links zu diesem Stammbaum auf diesem Gerät immer in %s öffnen?', e($open['open_in']['name'])) ?></p>
+        <p><?= $open['is_set'] ? I18N::translate('Zurzeit: eingeschaltet.') : I18N::translate('Zurzeit: ausgeschaltet.') ?></p>
         <p class="small"><?= I18N::translate('Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, zeigt sie dann %s statt des Browsers. Das gilt für diesen Browser; ändern kannst du es unten auf dieser Seite.', e($open['open_in']['name'])) ?></p>
         <form method="post" action="<?= e($open['save_url']) ?>" class="d-inline">
             <?= csrf_field() ?>
@@ -220,6 +221,13 @@ $none = Apps::matching($apps, $device) === [];
             <input type="hidden" name="app" value="<?= e($open['open_in']['id']) ?>">
             <input type="hidden" name="all" value="always">
             <button type="submit" class="btn btn-primary"><?= I18N::translate('Ja, immer in %s öffnen', e($open['open_in']['name'])) ?></button>
+        </form>
+        <form method="post" action="<?= e($open['save_url']) ?>" class="d-inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="on" value="0">
+            <input type="hidden" name="app" value="<?= e($open['open_in']['id']) ?>">
+            <input type="hidden" name="all" value="off">
+            <button type="submit" class="btn btn-outline-secondary"><?= I18N::translate('Deaktivieren') ?></button>
         </form>
     </div>
 <?php endif ?>
