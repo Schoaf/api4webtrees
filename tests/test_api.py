@@ -1626,6 +1626,19 @@ class Schreiben(unittest.TestCase):
         req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-done": "webtrees-mobile"}))
         req.add_header("User-Agent", IPHONE)
         self.assertIn("webtreesmobile://open-in?result=on", s._senden(req).text)
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-in": "webtrees-mobile"}))
+        req.add_header("User-Agent", IPHONE)
+        self.assertIn("Zurzeit: eingeschaltet.", s._senden(req).text)
+
+        # Aus der App ausgeschaltet: zurueck in die App, Links bleiben im Browser
+        aus = formular(s, "OpenSettings", {"on": "0", "app": "webtrees-mobile", "all": "off"}, "testbaum")
+        self.assertIn("open-result=off", aus.umleitung)
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-done": "webtrees-mobile", "open-result": "off"}))
+        req.add_header("User-Agent", IPHONE)
+        self.assertIn("webtreesmobile://open-in?result=off", s._senden(req).text)
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum", **{"open-in": "webtrees-mobile"}))
+        req.add_header("User-Agent", IPHONE)
+        self.assertIn("Zurzeit: ausgeschaltet.", s._senden(req).text)
 
     def test_ungueltiger_koppelcode(self):
         s = U.sitzung()

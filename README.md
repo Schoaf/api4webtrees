@@ -228,8 +228,8 @@ The contract for one-tap connecting is the one wtAnd uses:
 To open pages (see [Open links in the app](#open-links-in-the-app)), an app lists the areas it can show in `open`
 (`individual`, `family`, `media`, `chart`) and, on Android, its package in `package`. It then accepts
 `<scheme>://open?url=<page URL>` – the full webtrees address of the page, which the app maps to its own screen. To set it
-up from the app, open `…/App/{tree}?open-in=<app id>` in the browser; after the user agrees, the page offers a button
-back to `<scheme>://open-in?result=on`.
+up from the app, open `…/App/{tree}?open-in=<app id>` in the browser; the page shows whether it is on and offers to turn
+it on or off, then a button back to `<scheme>://open-in?result=on` (or `off`).
 
 ### Reading (GET)
 

@@ -7,8 +7,8 @@ the app: `<scheme>://open?url=<page URL>`, on Android with a package as `intent:
 without an error; elsewhere a store link appears if the app did not open within 2 s. Never when clicking through
 webtrees. Each user sets it per browser on the “App” page – on or off, and per area *ask* (default),
 *always* or *never* –, stored in a cookie set by the server, nothing on the server. Managers can switch areas off in the
-settings. An app can set it up from its side with `App/{tree}?open-in=<app id>`; the page then returns to
-`<scheme>://open-in?result=on`.
+settings. An app can set it up from its side with `App/{tree}?open-in=<app id>`; the page shows whether it is on, offers
+to turn it on or off and then returns to `<scheme>://open-in?result=on` (or `off`).
 
 **API levels 38 to 40.** **Level 38 – Crop of a media link** (GEDCOM 7 `2 CROP` with `TOP`, `LEFT`, `HEIGHT`, `WIDTH` in pixels): the part of
 an image that shows one person – each linked person can have their own part of the same group photo, the file stays
