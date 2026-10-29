@@ -248,47 +248,63 @@ $none = Apps::matching($apps, $device) === [];
 <?php endforeach ?>
 
 <?php if ($open !== null) : ?>
+    <?php $is_on = $open['choice']['on'] ?>
     <h3 class="h4 mt-4" id="open-in-app"><?= I18N::translate('Links in der App öffnen') ?></h3>
-    <form method="post" action="<?= e($open['save_url']) ?>">
+    <form method="post" action="<?= e($open['save_url']) ?>" data-open-settings>
         <?= csrf_field() ?>
-        <?php if (!$open['choice']['on']) : ?>
-            <p><?= I18N::translate('Links zu diesem Stammbaum öffnen sich in diesem Browser immer im Browser.') ?></p>
-            <button type="submit" name="on" value="1" class="btn btn-primary"><?= I18N::translate('In der App öffnen einschalten') ?></button>
-        <?php else : ?>
-            <p><?= I18N::translate('Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, fragt webtrees, ob sie in der App geöffnet werden soll. Die Einstellung gilt für diesen Browser.') ?></p>
-            <details class="mb-3">
-                <summary><?= I18N::translate('Weitere Optionen') ?></summary>
-                <div class="mt-3" style="max-width: 30rem;">
-                    <?php if (count($open['apps']) > 1) : ?>
-                        <label class="form-label" for="open-app"><?= I18N::translate('App') ?></label>
-                        <select class="form-select mb-3" name="app" id="open-app">
-                            <?php foreach ($open['apps'] as $open_app) : ?>
-                                <option value="<?= e($open_app['id']) ?>" <?= $open_app['id'] === $open['choice']['app'] ? 'selected' : '' ?>><?= e($open_app['name']) ?></option>
-                            <?php endforeach ?>
-                        </select>
-                    <?php else : ?>
-                        <input type="hidden" name="app" value="<?= e($open['apps'][0]['id']) ?>">
-                    <?php endif ?>
-                    <table class="table table-sm align-middle">
-                        <?php foreach ($open['areas'] as $area => $area_name) : ?>
-                            <tr>
-                                <th scope="row"><label for="open-mode-<?= e($area) ?>"><?= e($area_name) ?></label></th>
-                                <td>
-                                    <select class="form-select form-select-sm" name="mode-<?= e($area) ?>" id="open-mode-<?= e($area) ?>">
-                                        <?php foreach (['ask' => I18N::translate('Nachfragen'), 'always' => I18N::translate('Immer in der App'), 'never' => I18N::translate('Nie, im Browser bleiben')] as $mode => $mode_name) : ?>
-                                            <option value="<?= e($mode) ?>" <?= $open['choice']['modes'][$area] === $mode ? 'selected' : '' ?>><?= e($mode_name) ?></option>
-                                        <?php endforeach ?>
-                                    </select>
-                                </td>
-                            </tr>
+        <p><?= I18N::translate('Öffnest du eine Seite von außen – aus einer E-Mail, einem Chat, einem Lesezeichen –, kann webtrees sie in der App öffnen. Die Einstellung gilt für diesen Browser.') ?></p>
+        <?php /* Der Schalter speichert sofort; ohne JavaScript der Knopf daneben. */ ?>
+        <input type="hidden" name="on" value="<?= $is_on ? '1' : '0' ?>">
+        <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" role="switch" id="open-on" <?= $is_on ? 'checked' : '' ?>>
+            <label class="form-check-label" for="open-on"><?= $is_on ? I18N::translate('Öffnen in der App erlaubt') : I18N::translate('Nie in der App öffnen') ?></label>
+            <noscript><button type="submit" class="btn btn-sm btn-outline-secondary ms-2"><?= I18N::translate('Speichern') ?></button></noscript>
+        </div>
+        <?php /* Immer zu sehen, damit klar ist, dass es mehr gibt - aufklappbar nur, wenn es erlaubt ist. */ ?>
+        <details class="mb-3" <?= $is_on ? '' : 'data-open-locked' ?>>
+            <summary class="<?= $is_on ? '' : 'text-muted' ?>" <?= $is_on ? '' : 'aria-disabled="true" tabindex="-1"' ?>><?= I18N::translate('Weitere Optionen') ?></summary>
+            <div class="mt-3" style="max-width: 30rem;">
+                <?php if (count($open['apps']) > 1) : ?>
+                    <label class="form-label" for="open-app"><?= I18N::translate('App') ?></label>
+                    <select class="form-select mb-3" name="app" id="open-app">
+                        <?php foreach ($open['apps'] as $open_app) : ?>
+                            <option value="<?= e($open_app['id']) ?>" <?= $open_app['id'] === $open['choice']['app'] ? 'selected' : '' ?>><?= e($open_app['name']) ?></option>
                         <?php endforeach ?>
-                    </table>
-                    <button type="submit" class="btn btn-primary btn-sm"><?= I18N::translate('Speichern') ?></button>
-                </div>
-            </details>
-            <button type="submit" name="on" value="0" class="btn btn-outline-secondary btn-sm"><?= I18N::translate('Ausschalten – immer im Browser') ?></button>
-        <?php endif ?>
+                    </select>
+                <?php else : ?>
+                    <input type="hidden" name="app" value="<?= e($open['apps'][0]['id']) ?>">
+                <?php endif ?>
+                <table class="table table-sm align-middle">
+                    <?php foreach ($open['areas'] as $area => $area_name) : ?>
+                        <tr>
+                            <th scope="row"><label for="open-mode-<?= e($area) ?>"><?= e($area_name) ?></label></th>
+                            <td>
+                                <select class="form-select form-select-sm" name="mode-<?= e($area) ?>" id="open-mode-<?= e($area) ?>">
+                                    <?php foreach (['ask' => I18N::translate('Nachfragen'), 'always' => I18N::translate('Immer in der App'), 'never' => I18N::translate('Nie, im Browser bleiben')] as $mode => $mode_name) : ?>
+                                        <option value="<?= e($mode) ?>" <?= $open['choice']['modes'][$area] === $mode ? 'selected' : '' ?>><?= e($mode_name) ?></option>
+                                    <?php endforeach ?>
+                                </select>
+                            </td>
+                        </tr>
+                    <?php endforeach ?>
+                </table>
+                <button type="submit" class="btn btn-primary btn-sm"><?= I18N::translate('Speichern') ?></button>
+            </div>
+        </details>
     </form>
+    <script>
+      (function () {
+        var form = document.currentScript.previousElementSibling;
+        var on   = form.querySelector('input[name="on"]');
+        form.querySelector('#open-on').addEventListener('change', function (event) {
+          on.value = event.target.checked ? '1' : '0';
+          form.submit();
+        });
+        // Nicht erlaubt: "Weitere Optionen" bleibt zu sehen, klappt aber nicht auf.
+        var locked = form.querySelector('details[data-open-locked] summary');
+        if (locked) { locked.addEventListener('click', function (event) { event.preventDefault(); }); }
+      })();
+    </script>
 <?php endif ?>
 
 <p class="text-muted small mt-4"><?= I18N::translate('Alle Apps auf dieser Seite sprechen mit diesem Server über das webtrees-Modul %s.', '<a href="https://github.com/thobgg/api4webtrees" target="_blank" rel="noopener">api4webtrees</a>') ?></p>

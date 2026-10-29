@@ -1641,12 +1641,14 @@ class Schreiben(unittest.TestCase):
             req.add_header("Content-Type", "application/x-www-form-urlencoded")
             return s._senden(req)
 
-        # iPhone: webtrees mobile mit seinem Schema - je Sitzung nur einmal
+        # iPhone: webtrees mobile mit seinem Schema - bei jedem Aufruf von aussen, solange nichts gemerkt ist
         s = U.sitzung("admin")
         erste = seite(s, IPHONE).text
         self.assertIn("wt-open-in-app", erste)
         self.assertIn("webtreesmobile:\\/\\/open?url=", erste)
-        self.assertNotIn("wt-open-in-app", seite(s, IPHONE).text)
+        self.assertIn("Im Browser bleiben", erste)
+        self.assertIn("Entscheidung merken", erste)
+        self.assertIn("wt-open-in-app", seite(s, IPHONE).text)
 
         # Innerhalb von webtrees weitergeklickt: nichts
         self.assertNotIn("wt-open-in-app", seite(U.sitzung("admin"), IPHONE, von="same-origin").text)

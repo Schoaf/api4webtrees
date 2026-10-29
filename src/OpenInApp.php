@@ -7,7 +7,6 @@ namespace Api4Webtrees;
 use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
-use Fisharebest\Webtrees\Session;
 use Fisharebest\Webtrees\Validator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -53,9 +52,6 @@ trait OpenInApp
     private const string OPEN_COOKIE         = 'api4webtrees_open';
     private const int    OPEN_COOKIE_SECONDS = 2 * 365 * 24 * 3600;
     private const array  OPEN_MODES          = ['ask', 'always', 'never'];
-
-    // Sitzung: schon einmal gefragt - der Dialog kommt je Sitzung nur einmal, auch nicht beim Neuladen.
-    private const string OPEN_ASKED_SESSION = 'api4webtrees_open_asked';
 
     // Zurueck aus Chrome, weil die App fehlt (intent://, S.browser_fallback_url): die Seite bleibt im Browser.
     private const string OPEN_STAY = 'open-stay';
@@ -242,7 +238,7 @@ trait OpenInApp
         $tree = Validator::attributes($request)->treeOptional();
 
         if ($area === null || $tree === null || !$this->treeEnabled($tree) || !self::cameFromOutside($request)
-            || Validator::queryParams($request)->string(self::OPEN_STAY, '') !== '' || Session::has(self::OPEN_ASKED_SESSION)) {
+            || Validator::queryParams($request)->string(self::OPEN_STAY, '') !== '') {
             return null;
         }
 
@@ -255,7 +251,6 @@ trait OpenInApp
 
         foreach ($this->openApps($device, $area) as $app) {
             if ($app['id'] === $choice['app'] && ($app['package'][$device] ?? '') !== '') {
-                Session::put(self::OPEN_ASKED_SESSION, true);
                 $page = (string) $request->getUri();
                 $stay = $page . (str_contains($page, '?') ? '&' : '?') . self::OPEN_STAY . '=1';
 
@@ -276,8 +271,7 @@ trait OpenInApp
     {
         $area = self::openArea($request);
 
-        if ($area === null || !self::cameFromOutside($request) || Session::has(self::OPEN_ASKED_SESSION)
-            || Validator::queryParams($request)->string(self::OPEN_STAY, '') !== '') {
+        if ($area === null || !self::cameFromOutside($request) || Validator::queryParams($request)->string(self::OPEN_STAY, '') !== '') {
             return null;
         }
 
@@ -298,8 +292,6 @@ trait OpenInApp
         // Immer: nur mit einer gewaehlten App, die es hier noch gibt - sonst wieder fragen.
         $always = $mode === 'always' ? array_values(array_filter($apps, static fn (array $app): bool => $app['id'] === $choice['app']))[0] ?? null : null;
         $page   = (string) $request->getUri();
-
-        Session::put(self::OPEN_ASKED_SESSION, true);
 
         $offers = [];
 
