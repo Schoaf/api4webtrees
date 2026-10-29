@@ -108,8 +108,8 @@ abschalten: Das schaltet in webtrees das ganze Modul ab, samt Schnittstelle.
 ### Links in der App öffnen
 
 Wird eine Seite, die eine App zeigen kann, von außen geöffnet – aus einer E-Mail, einem Chat, einem Lesezeichen –,
-bietet unten ein Kasten an, sie in der App zu öffnen, mit *Auswahl merken*. Beim Weiterklicken in webtrees fragt er
-nie, und je Sitzung nur einmal. Auf Android öffnet sich die App per `intent://`: Ohne App geht Chrome in den Store statt
+bietet unten ein Kasten an, sie in der App zu öffnen oder im Browser zu bleiben, mit *Entscheidung merken*. Beim
+Weiterklicken in webtrees fragt er nie. Auf Android öffnet sich die App per `intent://`: Ohne App geht Chrome in den Store statt
 einer Fehlermeldung. Anderswo zeigt der Kasten, wo es die App gibt, wenn die Seite nach 2 Sekunden noch da ist (die
 eigene Fehlermeldung von Safari für eine unbekannte Adresse lässt sich nicht unterdrücken). Safari fragt außerdem
 selbst, bevor es eine App öffnet.

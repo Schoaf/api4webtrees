@@ -106,8 +106,8 @@ webtrees that switches off the whole module, including the API.
 ### Open links in the app
 
 When a page that an app can show is opened from outside – from an e-mail, a chat, a bookmark –, a box at the bottom
-offers to open it in the app, with *Remember my choice*. Clicking through webtrees never asks, and it asks once per
-session. On Android the app opens via `intent://`: without the app installed, Chrome goes to the store instead of
+offers to open it in the app or to stay in the browser, with *Remember my choice*. Clicking through webtrees never
+asks. On Android the app opens via `intent://`: without the app installed, Chrome goes to the store instead of
 showing an error. Elsewhere, if the page is still there after 2 seconds, the box shows where to install the app
 (Safari's own error for an unknown address can't be suppressed). Safari also asks before it opens any app.
 

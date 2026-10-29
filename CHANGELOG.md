@@ -4,8 +4,8 @@
 **Open links in the app** (#22): when a page an app can show (person, family, media, chart – the apps say which in
 `src/Apps.php`, field `open`) is opened from outside – an e-mail, a chat, a bookmark –, the footer offers to open it in
 the app: `<scheme>://open?url=<page URL>`, on Android with a package as `intent://`, so Chrome falls back to the store
-without an error; elsewhere a store link appears if the app did not open within 2 s. Once per session, never when
-clicking through webtrees. Each user sets it per browser on the “App” page – on or off, and per area *ask* (default),
+without an error; elsewhere a store link appears if the app did not open within 2 s. Never when clicking through
+webtrees. Each user sets it per browser on the “App” page – on or off, and per area *ask* (default),
 *always* or *never* –, stored in a cookie set by the server, nothing on the server. Managers can switch areas off in the
 settings. An app can set it up from its side with `App/{tree}?open-in=<app id>`; the page then returns to
 `<scheme>://open-in?result=on`.
