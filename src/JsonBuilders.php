@@ -62,6 +62,12 @@ trait JsonBuilders
         'GIVN', 'SURN', 'NPFX', 'SPFX', 'NSFX', 'NICK', '_RUFNAME',
     ];
 
+    // Ab Stufe 45: die Teile eines Namens (Unterzeilen von 1 NAME) und ihr Feld in nameParts
+    private const array NAME_PARTS = [
+        'NPFX' => 'prefix', 'GIVN' => 'given', 'NICK' => 'nickname', 'SPFX' => 'surnamePrefix', 'SURN' => 'surname',
+        'NSFX' => 'suffix', '_RUFNAME' => 'callName',
+    ];
+
     // Unter "1 ASSO": die Beziehung steht schon in associates
     private const array ASSOCIATE_FIELDS = ['RELA', 'ROLE'];
 
@@ -380,6 +386,9 @@ trait JsonBuilders
                 'noteXref'       => $tag === 'NOTE' && preg_match('/^@([^@]+)@$/', $fact->value(), $nx) === 1 ? $nx[1] : null,
                 // Ab Stufe 37: alle uebrigen Angaben des Fakts als Zeilen zum Anzeigen (Alter, Telefon, Abstammung ...)
                 'details'        => $this->factDetails($fact, $tree),
+                // Ab Stufe 45: bei NAME die Teile des Namens, wie sie darunter stehen - fuer jeden Namen, nicht nur den
+                // ersten (Geburts-, Ehe-, Rufname ...). Sonst null. Bis 1.27.0 kamen sie nirgends heraus (Issue #27).
+                'nameParts'      => $tag === 'NAME' ? $this->nameParts($fact) : null,
             ];
         }
 
@@ -1175,6 +1184,25 @@ trait JsonBuilders
             'notes'   => $notes,
             'media'   => $media,
         ];
+    }
+
+    /**
+     * Ab Stufe 45: die Teile eines Namens (2 NPFX, GIVN, NICK, SPFX, SURN, NSFX, _RUFNAME), wie sie im GEDCOM stehen;
+     * null, wo eine Zeile fehlt. Der Fakt selbst ist schon nach dem Datenschutz gefiltert - die Teile zeigen nichts,
+     * was nicht ohnehin in seinem Wert (dem vollen Namen) steht oder als Spitzname im angezeigten Namen.
+     *
+     * @return array<string,string|null>
+     */
+    private function nameParts(Fact $fact): array
+    {
+        $parts = [];
+
+        foreach (self::NAME_PARTS as $gedcom_tag => $field) {
+            $value          = trim($fact->attribute($gedcom_tag));
+            $parts[$field]  = $value === '' ? null : $value;
+        }
+
+        return $parts;
     }
 
     /**

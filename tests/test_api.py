@@ -1566,6 +1566,28 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, a.json["ok"], a)
         self.assertEqual("INT 1916 (laut Pfarrer)", fakt("DEAT")["sources"][0]["date"]["gedcom"])
 
+    def test_namensteile_jedes_namens(self):
+        """Stufe 45: nameParts an jedem NAME-Fakt, auch am Ehenamen (Issue #27)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Johanna", "surname": "Teilprobe", "sex": "F", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+        name = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+        a = s.post("Fact", "testbaum", {"factId": name["id"], "gedcom": "1 NAME Dr. Johanna /von Teilprobe/ jr.\n2 TYPE birth\n2 NPFX Dr.\n"
+                                        "2 GIVN Johanna\n2 NICK Hanne\n2 SPFX von\n2 SURN Teilprobe\n2 NSFX jr.\n2 _RUFNAME Johanna"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        a = s.post("Fact", "testbaum", {"gedcom": "1 NAME Johanna /Ehemann/\n2 TYPE married\n2 GIVN Johanna\n2 SURN Ehemann"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        namen = [f for f in self.fakten(s, p) if f["tag"] == "NAME"]
+        self.assertEqual([
+            {"prefix": "Dr.", "given": "Johanna", "nickname": "Hanne", "surnamePrefix": "von", "surname": "Teilprobe", "suffix": "jr.", "callName": "Johanna"},
+            {"prefix": None, "given": "Johanna", "nickname": None, "surnamePrefix": None, "surname": "Ehemann", "suffix": None, "callName": None},
+        ], [n["nameParts"] for n in namen])
+        self.assertEqual(["birth", "married"], [n["type"].lower() for n in namen])
+        # andere Fakten: null; die Teile stehen nicht doppelt in details
+        self.assertIsNone(next(f for f in self.fakten(s, p) if f["tag"] == "SEX")["nameParts"])
+        self.assertEqual([], [d for n in namen for d in n["details"] if d["tag"] in ("NPFX", "GIVN", "NICK", "SPFX", "SURN", "NSFX", "_RUFNAME")])
+
     def test_app_liste_gueltig(self):
         """src/Apps.php: jeder Eintrag vollstaendig, https, Schema eindeutig - die Pruefung, die ein Pull Request bestehen muss."""
         modul = os.path.join(umgebung.HIER, "..")

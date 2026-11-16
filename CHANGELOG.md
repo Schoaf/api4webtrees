@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+**Level 45 – all parts of every name (issue #27).** Each `NAME` fact now has `nameParts` `{prefix, given, nickname,
+surnamePrefix, surname, suffix, callName}`: the lines `2 NPFX`, `GIVN`, `NICK`, `SPFX`, `SURN`, `NSFX` and `_RUFNAME` as
+stored, `null` where a line is missing – for every name (birth name, married name …), not only the first. Until now these
+lines were left out of `details` because they were meant to have fields of their own, which never existed; only
+`given`/`surname` of the primary name were available on the person. Other facts have `nameParts: null`.
+
 **Level 44 – uncertain dates (app4webtrees#44).** Every individual (in `Individual`, lists, families and place answers)
 has `lifespanGedcom` `{birth, death}`: the dates behind `lifespan` as stored, e.g. `ABT 1865` or `BET 1915 AND 1918`
 (`null` where there is none; same choice and privacy as webtrees' lifespan). `lifespan` shows only the years, so a client

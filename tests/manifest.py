@@ -67,7 +67,10 @@ ROUTEN = [
      "person (and every individual in lists, families and place answers) has `lifespanGedcom` `{birth, death}`: the "
      "dates behind `lifespan` as stored, e.g. `ABT 1865`, `BET 1915 AND 1918` (`null` where there is none) – `lifespan` "
      "shows only the years, so a client can mark uncertain ones; `birth.date` and `death.date` carry them as `gedcom`. "
-     "A date that is only text in brackets (`(about 1900)`) comes with that text, `year` 0 and `jd` 0.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "A date that is only text in brackets (`(about 1900)`) comes with that text, `year` 0 and `jd` 0. From level 45 every "
+     "`NAME` fact (birth name, married name …, not only the first) has `nameParts` `{prefix, given, nickname, surnamePrefix, "
+     "surname, suffix, callName}` – the lines `2 NPFX`, `GIVN`, `NICK`, `SPFX`, `SURN`, `NSFX`, `_RUFNAME` as stored, `null` "
+     "where a line is missing; other facts have `nameParts: null`.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",
