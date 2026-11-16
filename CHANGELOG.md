@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+**Fix – writing a name through `value` (route Fact).** With `2 SPFX von` a name `/von Berg/` was stored as `SURN von Berg`;
+now `SURN Berg`, as GEDCOM intends (the prefix before the given names, NPFX, was already handled). A nickname in quotes –
+the way the module shows `2 NICK` in names (`Johannes "Jan" de Vries`) – ended up in the name and in `GIVN` when an app
+sent the shown name back; now `GIVN` never contains a quoted part, and if the stored name had no quotes, the quoted part
+goes to `2 NICK` (added or replaced) instead of into the name. `_RUFNAME` stays as before, also when it is no longer
+literally among the given names – a corrected spelling (Heinrich → Hinrich) must not drop it.
+
 ## 1.28.0 – 2026-11-16
 **Level 45 – all parts of every name (issue #27).** Each `NAME` fact now has `nameParts` `{prefix, given, nickname,
 surnamePrefix, surname, suffix, callName}`: the lines `2 NPFX`, `GIVN`, `NICK`, `SPFX`, `SURN`, `NSFX` and `_RUFNAME` as

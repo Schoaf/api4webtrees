@@ -1574,6 +1574,17 @@ trait WriteActions
 
             if (array_key_exists('value', $body)) {
                 $value  = GedcomText::multiline($this->str($body, 'value'), 2);
+
+                // Spitzname aus der Anzeige: Das Modul zeigt 2 NICK in Anfuehrungszeichen im Namen ("Johannes \"Jan\" de Vries",
+                // siehe recordName). Hatte der gespeicherte Name keine Anfuehrungszeichen, ist ein solcher Teil der Spitzname -
+                // er gehoert nach 2 NICK, nicht in den Namen (bis 1.28.0 landete er im Namen und in GIVN).
+                if ($tag === 'NAME' && !str_contains($gedcom, '"') && preg_match('/^([^\/]*?)\s*"([^"]*)"\s*([^\/]*)(\/.*)?$/s', $value, $nick_match) === 1) {
+                    $nickname = trim($nick_match[2]);
+                    $value    = trim(trim($nick_match[1]) . ' ' . trim($nick_match[3])) . (($nick_match[4] ?? '') === '' ? '' : ' ' . $nick_match[4]);
+                    $value    = trim($value);
+                    $nick_new = $nickname === '' ? null : $nickname;
+                }
+
                 $gedcom = '1 ' . $tag . ($value === '' ? '' : ' ' . $value);
                 // Fortsetzungszeilen des alten Werts entfernen
                 $rest = (string) preg_replace('/^(\n2 CONT ?.*)+/', '', $rest);
@@ -1586,15 +1597,29 @@ trait WriteActions
             }
 
             $gedcom .= $rest;
+
+            if (isset($nick_new)) {
+                $gedcom = preg_match('/\n2 NICK .*/', $gedcom) === 1
+                    ? (string) preg_replace_callback('/\n2 NICK .*/', static fn (): string => "\n2 NICK " . $nick_new, $gedcom, 1)
+                    : $gedcom . "\n2 NICK " . $nick_new;
+            }
         }
 
-        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', $this->str($body, 'value'), $match) === 1) {
-            $given = trim($match[1]);
+        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', preg_match('/^1 NAME (.*)/', $gedcom, $line) === 1 ? $line[1] : '', $match) === 1) {
+            // GIVN nie mit einem Teil in Anfuehrungszeichen - der ist ein Spitzname, kein Vorname
+            $given = trim((string) preg_replace('/\s*"[^"]*"\s*/', ' ', $match[1]));
             // Ein vorhandenes Praefix ("Dr.") steht vorn im Namen, gehoert aber nicht zu den Vornamen.
             if (preg_match('/\n2 NPFX (.+)/', $gedcom, $npfx) === 1 && str_starts_with($given, trim($npfx[1]) . ' ')) {
                 $given = trim(substr($given, strlen(trim($npfx[1]))));
             }
-            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]))
+            // Ebenso ein Vorsatz ("von", "de la") vor dem Familiennamen: SURN ohne ihn, wie GEDCOM es vorsieht
+            $surname = trim($match[2]);
+            if (preg_match('/\n2 SPFX (.+)/', $gedcom, $spfx) === 1 && str_starts_with($surname, trim($spfx[1]) . ' ')) {
+                $surname = trim(substr($surname, strlen(trim($spfx[1]))));
+            }
+            // _RUFNAME bleibt bewusst stehen, auch wenn er nicht woertlich unter den Vornamen steht: eine korrigierte
+            // Schreibweise ("Heinrich" -> "Hinrich") wuerde ihn sonst still loeschen (tests: GedcomL verliert nichts).
+            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . ($surname === '' ? '' : "\n2 SURN " . $surname)
                 . (trim($match[3]) === '' ? '' : "\n2 NSFX " . trim($match[3]));
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
         }

@@ -1566,6 +1566,49 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, a.json["ok"], a)
         self.assertEqual("INT 1916 (laut Pfarrer)", fakt("DEAT")["sources"][0]["date"]["gedcom"])
 
+    def test_name_schreiben_vorsatz_spitzname_rufname(self):
+        """Name ueber value aendern: SURN ohne Vorsatz (SPFX), Spitzname aus der Anzeige nach NICK statt in GIVN,
+        _RUFNAME bleibt, auch wenn er nicht mehr woertlich unter den Vornamen steht (gemeldet aus app4webtrees)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Johanna", "surname": "Vorsatzprobe", "sex": "F", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+
+        def name():
+            return next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+
+        def name_gedcom():
+            g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+            return re.search(r"\n1 NAME .*?(?=\n1 |$)", g, re.S).group(0)
+
+        a = s.post("Fact", "testbaum", {"factId": name()["id"], "gedcom": "1 NAME Johanna Maria /von Berg/\n2 GIVN Johanna Maria\n2 SPFX von\n"
+                                        "2 SURN Berg\n2 NICK Hanne\n2 _RUFNAME Maria"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        # So zeigt das Modul den Namen - eine App schickt ihn so zurueck
+        angezeigt = s.get("Individual", "testbaum", xref=p).json["person"]["name"]
+        self.assertIn('"Hanne"', angezeigt)
+
+        # 1. Vorsatz und Spitzname: unveraendert zurueckgeschickt bleibt alles, wie es war
+        a = s.post("Fact", "testbaum", {"factId": name()["id"], "value": 'Johanna "Hanne" Maria /von Berg/'}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        g = name_gedcom()
+        self.assertTrue(g.startswith("\n1 NAME Johanna Maria /von Berg/\n"), g)
+        for zeile in ("2 GIVN Johanna Maria", "2 SPFX von", "2 SURN Berg", "2 NICK Hanne", "2 _RUFNAME Maria"):
+            self.assertIn("\n" + zeile, g)
+        self.assertNotIn("SURN von Berg", g)
+
+        # 2. Spitzname in der Anzeige geaendert: NICK folgt, der Name bleibt ohne Anfuehrungszeichen
+        s.post("Fact", "testbaum", {"factId": name()["id"], "value": 'Johanna "Hannchen" Maria /von Berg/'}, xref=p)
+        g = name_gedcom()
+        self.assertIn("\n2 NICK Hannchen", g)
+        self.assertNotIn('"', g)
+
+        # 3. Rufname nicht mehr woertlich unter den Vornamen: _RUFNAME bleibt (Schreibweise korrigiert, nichts verlieren)
+        s.post("Fact", "testbaum", {"factId": name()["id"], "value": "Johanna /von Berg/"}, xref=p)
+        g = name_gedcom()
+        self.assertIn("\n2 GIVN Johanna\n", g)
+        self.assertIn("\n2 _RUFNAME Maria", g)
+
     def test_namensteile_jedes_namens(self):
         """Stufe 45: nameParts an jedem NAME-Fakt, auch am Ehenamen (Issue #27)."""
         s = U.sitzung("admin")
