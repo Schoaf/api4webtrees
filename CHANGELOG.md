@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.28.0 – 2026-11-16
 **Level 45 – all parts of every name (issue #27).** Each `NAME` fact now has `nameParts` `{prefix, given, nickname,
 surnamePrefix, surname, suffix, callName}`: the lines `2 NPFX`, `GIVN`, `NICK`, `SPFX`, `SURN`, `NSFX` and `_RUFNAME` as
 stored, `null` where a line is missing – for every name (birth name, married name …), not only the first. Until now these
