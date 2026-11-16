@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.28.1 – 2026-11-16
 **Fix – writing a name through `value` (route Fact).** With `2 SPFX von` a name `/von Berg/` was stored as `SURN von Berg`;
 now `SURN Berg`, as GEDCOM intends (the prefix before the given names, NPFX, was already handled). A nickname in quotes –
 the way the module shows `2 NICK` in names (`Johannes "Jan" de Vries`) – ended up in the name and in `GIVN` when an app
