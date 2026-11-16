@@ -1508,6 +1508,64 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("julian", treffer[0]["date"]["calendar"])
         self.assertEqual(datum, treffer[0]["date"]["gedcom"])
 
+    def test_ungenaue_daten_und_unterzeilen(self):
+        """Stufe 44: Zusaetze und Freitext bleiben beim Schreiben wie eingegeben, 3 TIME bleibt beim Aendern des Datums,
+        lifespanGedcom nennt die Daten hinter lifespan (app4webtrees#44)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Ungenau", "surname": "Datumsprobe", "sex": "M", "dead": True,
+                                                    "birthDate": "abt 1865", "deathDate": "bet 1915 and 1918 (laut Grabstein)"})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+
+        def gedcom():
+            return umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+
+        def fakt(tag):
+            return next(f for f in self.fakten(s, p) if f["tag"] == tag)
+
+        # Anlegen: Schluesselwoerter gross, Text in Klammern wie eingegeben
+        self.assertIn("\n1 BIRT\n2 DATE ABT 1865", gedcom())
+        self.assertIn("\n1 DEAT\n2 DATE BET 1915 AND 1918 (laut Grabstein)", gedcom())
+
+        # lifespanGedcom in der Person, in birth/death und in Listen (personShort)
+        person = s.get("Individual", "testbaum", xref=p).json["person"]
+        self.assertEqual({"birth": "ABT 1865", "death": "BET 1915 AND 1918 (laut Grabstein)"}, person["lifespanGedcom"])
+        self.assertEqual(("ABT 1865", "BET 1915 AND 1918 (laut Grabstein)"), (person["birth"]["date"]["gedcom"], person["death"]["date"]["gedcom"]))
+        liste = s.get("Individuals", "testbaum", q="Datumsprobe").json["data"]
+        self.assertEqual({"birth": "ABT 1865", "death": "BET 1915 AND 1918 (laut Grabstein)"}, next(x for x in liste if x["xref"] == p)["lifespanGedcom"])
+
+        # Jeder Zusatz einmal ueber die Route Fact schreiben und wieder lesen
+        for eingabe, soll in [("est 1865", "EST 1865"), ("cal 1865", "CAL 1865"), ("bef 1865", "BEF 1865"), ("aft 1865", "AFT 1865"),
+                              ("bet 1860 and 1865", "BET 1860 AND 1865"), ("from 1860 to 1865", "FROM 1860 TO 1865"),
+                              ("int 1865 (kurz nach Neujahr)", "INT 1865 (kurz nach Neujahr)"),
+                              ("@#djulian@ 1 jan 1865", "@#DJULIAN@ 1 JAN 1865"), ("abt 1865", "ABT 1865"),
+                              ("(um die Jahrhundertwende)", "(um die Jahrhundertwende)")]:
+            a = s.post("Fact", "testbaum", {"factId": fakt("BIRT")["id"], "date": eingabe}, xref=p)
+            self.assertEqual(True, a.json["ok"], (eingabe, a))
+            self.assertEqual(soll, fakt("BIRT")["date"]["gedcom"], eingabe)
+            if eingabe.startswith("@#"):
+                self.assertEqual("julian", fakt("BIRT")["date"]["calendar"])
+
+        # Nur Text in Klammern: lesbar mit year 0 und jd 0; lifespan kennt kein Geburtsjahr mehr, lifespanGedcom auch nicht
+        self.assertEqual(("um die Jahrhundertwende", 0, 0), tuple(fakt("BIRT")["date"][k] for k in ("text", "year", "jd")))
+        self.assertIsNone(s.get("Individual", "testbaum", xref=p).json["person"]["lifespanGedcom"]["birth"])
+        self.assertEqual("invalid-date", s.post("Fact", "testbaum", {"factId": fakt("BIRT")["id"], "date": "irgendwann"}, xref=p).json["error"])
+
+        # 3 TIME unter dem Datum bleibt, wenn sich das Datum aendert; ohne Datum geht sie mit
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "gedcom": "1 DEAT\n2 DATE 3 MAR 1916\n3 TIME 10:30\n2 PLAC Offenbach"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "date": "abt 4 mar 1916"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn("\n1 DEAT\n2 DATE ABT 4 MAR 1916\n3 TIME 10:30\n2 PLAC Offenbach", gedcom())
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "date": ""}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn("\n1 DEAT\n2 PLAC Offenbach\n1 ", gedcom())  # Datum samt 3 TIME weg (1 CHAN hat eine eigene TIME)
+
+        # Fundstelle: Datum der Fundstelle ebenso (2 DATA / 3 DATE)
+        a = s.post("Citation", "testbaum", {"factId": fakt("DEAT")["id"], "source": "S1", "date": "int 1916 (laut Pfarrer)"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual("INT 1916 (laut Pfarrer)", fakt("DEAT")["sources"][0]["date"]["gedcom"])
+
     def test_app_liste_gueltig(self):
         """src/Apps.php: jeder Eintrag vollstaendig, https, Schema eindeutig - die Pruefung, die ein Pull Request bestehen muss."""
         modul = os.path.join(umgebung.HIER, "..")

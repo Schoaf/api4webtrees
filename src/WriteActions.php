@@ -7,7 +7,6 @@ namespace Api4Webtrees;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Exceptions\FileUploadException;
-use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\FlashMessages;
@@ -562,7 +561,7 @@ trait WriteActions
             }
         }
 
-        if (array_key_exists('date', $body) && $this->str($body, 'date') !== '' && !(new Date(strtoupper($this->str($body, 'date'))))->isOK()) {
+        if (array_key_exists('date', $body) && $this->str($body, 'date') !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, 'date')))) {
             return $this->error(400, 'invalid-date');
         }
 
@@ -663,12 +662,14 @@ trait WriteActions
         if (array_key_exists('date', $body) || array_key_exists('text', $body)) {
             // DATA buendelt Datum und Text der Fundstelle; nicht genannte Teile aus dem alten DATA uebernehmen
             $existing_data = GedcomText::subrecords($rest, $sub_level, 'DATA')[0][1] ?? '';
-            $date    = array_key_exists('date', $body) ? strtoupper(GedcomText::line($this->str($body, 'date'))) : (GedcomText::subrecords($existing_data, $sub_level + 1, 'DATE')[0][0] ?? '');
+            $old_date = GedcomText::subrecords($existing_data, $sub_level + 1, 'DATE')[0] ?? ['', ''];
+            $date     = array_key_exists('date', $body) ? GedcomText::date($this->str($body, 'date')) : $old_date[0];
             $text     = array_key_exists('text', $body) ? $this->str($body, 'text') : GedcomText::firstValue(ltrim($existing_data, "\n"), $sub_level + 1, 'TEXT');
             $data     = '';
 
             if ($date !== '') {
-                $data .= "\n" . ($sub_level + 1) . ' DATE ' . $date;
+                // Unterzeilen des alten Datums (TIME) bleiben, auch wenn sich das Datum aendert
+                $data .= "\n" . ($sub_level + 1) . ' DATE ' . $date . $old_date[1];
             }
 
             if (trim($text) !== '') {
@@ -896,7 +897,7 @@ trait WriteActions
         }
 
         foreach (['birthDate', 'deathDate', 'marriageDate'] as $key) {
-            if ($this->str($body, $key) !== '' && !(new Date($this->str($body, $key)))->isOK()) {
+            if ($this->str($body, $key) !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, $key)))) {
                 return $this->error(400, 'invalid-date');
             }
         }
@@ -996,7 +997,7 @@ trait WriteActions
             return $this->error(400, 'invalid-relation');
         }
 
-        if ($this->str($body, 'marriageDate') !== '' && !(new Date($this->str($body, 'marriageDate')))->isOK()) {
+        if ($this->str($body, 'marriageDate') !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, 'marriageDate')))) {
             return $this->error(400, 'invalid-date');
         }
 
@@ -1617,9 +1618,17 @@ trait WriteActions
         }
 
         if (array_key_exists('date', $body)) {
-            $date   = strtoupper(GedcomText::line($this->str($body, 'date')));
-            $gedcom = (string) preg_replace('/\n2 DATE.*(\n[3-9] .*)*/', '', $gedcom);
-            $gedcom = GedcomText::insertAfterFirstLine($gedcom, $date === '' ? '' : "\n2 DATE " . $date);
+            $date = GedcomText::date($this->str($body, 'date'));
+
+            if ($date === '') {
+                // Datum geloescht: samt seinen Unterzeilen (3 TIME ...), die ohne Datum nichts bedeuten
+                $gedcom = (string) preg_replace('/\n2 DATE.*(\n[3-9] .*)*/', '', $gedcom);
+            } elseif (preg_match('/\n2 DATE.*/', $gedcom) === 1) {
+                // Nur die Zeile selbst ersetzen - Unterzeilen wie "3 TIME 10:30" bleiben (bis 1.27.0 gingen sie verloren)
+                $gedcom = (string) preg_replace_callback('/\n2 DATE.*/', static fn (): string => "\n2 DATE " . $date, $gedcom, 1);
+            } else {
+                $gedcom = GedcomText::insertAfterFirstLine($gedcom, "\n2 DATE " . $date);
+            }
         }
 
         // Art des Ereignisses (ab Stufe 20), bei der Heirat in webtrees' Form: CIVIL, RELIGIOUS, PARTNERS, COMMON LAW

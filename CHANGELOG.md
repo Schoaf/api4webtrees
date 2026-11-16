@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+**Level 44 – uncertain dates (app4webtrees#44).** Every individual (in `Individual`, lists, families and place answers)
+has `lifespanGedcom` `{birth, death}`: the dates behind `lifespan` as stored, e.g. `ABT 1865` or `BET 1915 AND 1918`
+(`null` where there is none; same choice and privacy as webtrees' lifespan). `lifespan` shows only the years, so a client
+can now mark uncertain ones. In `Individual`, `person.birth.date` and `person.death.date` also carry `gedcom`. A date that is
+only text in brackets (`(about 1900)`) is now accepted when writing and comes back with that text, `year` 0 and `jd` 0.
+
+**Fix – text in dates was written in capitals.** Writing a date (Fact, Citation, AddIndividual, AddSpouse) capitalised
+all of it, so `INT 1900 (shortly after New Year)` became `(SHORTLY AFTER NEW YEAR)`. Now only keywords, months and
+calendar escapes are capitalised; text in brackets stays as entered. Lower-case input such as `abt 1865` is now accepted
+in AddIndividual and AddSpouse as well.
+
+**Fix – changing a date dropped its sub-lines.** Changing the date of a fact through `Fact` removed `3 TIME` and other
+lines under `2 DATE`; they now stay. An empty date removes the date together with its sub-lines, as before. The date of a
+citation keeps its sub-lines in the same way.
+
 ## 1.27.0 – 2026-11-14
 **Runs on webtrees 2.2.6 and on the development state of 2.3.** Tested against webtrees main of 2026-11-04 (2.3.0-dev);
 2.3 is not released and may still change. webtrees main removed or retyped several things

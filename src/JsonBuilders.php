@@ -96,6 +96,8 @@ trait JsonBuilders
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),
             'lifespan' => $this->plain($individual->lifespan()),
+            // ab Stufe 44: die Daten hinter lifespan in GEDCOM-Form, um ungenaue Lebensjahre zu kennzeichnen
+            'lifespanGedcom' => $this->lifespanGedcom($individual),
             'thumb'    => $this->portraitUrl($individual),
             'url'      => $individual->url(),
         ];
@@ -120,6 +122,8 @@ trait JsonBuilders
         $given   = str_contains($primary['givn'] ?? '', '@') ? '' : $this->plain($primary['givn'] ?? '');
         $surname = str_contains($primary['surname'] ?? '', '@') ? '' : $this->plain($primary['surname'] ?? '');
 
+        $life = $this->lifespanGedcom($individual);
+
         $summary = [
             'xref'       => $individual->xref(),
             'name'       => $this->recordName($individual),
@@ -137,8 +141,10 @@ trait JsonBuilders
             'nameAccess' => $individual->canShowName(Compat::visitor()) ? 'visitor' : ($individual->canShowName(Compat::member()) ? 'member' : 'manager'),
             'restricted' => $this->eingeschraenkt($individual),
             'lifespan'   => $this->plain($individual->lifespan()),
-            'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace()),
-            'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace()),
+            // ab Stufe 44: die Daten hinter lifespan in GEDCOM-Form ("ABT 1865"); birth.date und death.date tragen sie als gedcom
+            'lifespanGedcom' => $life,
+            'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace(), $life['birth'] ?? ''),
+            'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace(), $life['death'] ?? ''),
             // ab Stufe 14: Rufname, Taufe, Begraebnis und erster Beruf - fuer Tafeln und Listen, ohne die Person
             // einzeln abzurufen. facts() liefert fuer nicht sichtbare Personen nichts, dann bleibt alles leer.
             'call'       => $individual->canShowName() ? $this->callName($individual, $primary['full'] ?? '') : '',
@@ -779,9 +785,38 @@ trait JsonBuilders
     /**
      * @return array<string,mixed>|null
      */
-    private function eventJson(Date $date, Place $place): array|null
+    /**
+     * Ab Stufe 44: Geburts- und Sterbedatum, aus denen webtrees die Lebensjahre (lifespan) bildet, so wie sie im GEDCOM
+     * stehen ("ABT 1865", "BET 1915 AND 1918") - lifespan zeigt nur die Jahre, ein Client kann so ungenaue kennzeichnen.
+     * Dieselbe Auswahl wie Individual::getBirthDate()/getDeathDate(): das erste gueltige Datum von BIRT, sonst CHR,
+     * BAPM (DEAT, BURI, CREM). Nur sichtbare Ereignisse (facts() wendet den Datenschutz an); null, wo es keins gibt.
+     *
+     * @return array{birth:string|null,death:string|null}
+     */
+    private function lifespanGedcom(Individual $individual): array
     {
-        $date_json  = $this->dateJson($date);
+        $first = static function (array $tags) use ($individual): string|null {
+            if (!$individual->canShow()) {
+                return null;
+            }
+
+            foreach ($tags as $tag) {
+                foreach ($individual->facts([$tag], false, null, true) as $fact) {
+                    if ($fact->date()->isOK()) {
+                        return $fact->attribute('DATE');
+                    }
+                }
+            }
+
+            return null;
+        };
+
+        return ['birth' => $first(['BIRT', 'CHR', 'BAPM']), 'death' => $first(['DEAT', 'BURI', 'CREM'])];
+    }
+
+    private function eventJson(Date $date, Place $place, string $gedcom = ''): array|null
+    {
+        $date_json  = $this->dateJson($date, $gedcom);
         $place_json = $this->placeJson($place, null, null);
 
         if ($date_json === null && $place_json === null) {
@@ -806,6 +841,18 @@ trait JsonBuilders
      */
     private function dateJson(Date $date, string $gedcom = ''): array|null
     {
+        // Ab Stufe 44: ein Datum, das nur aus Text in Klammern besteht ("(um die Jahrhundertwende)"), kommt mit diesem Text,
+        // year 0 und jd 0 - wie webtrees ein Datum ohne Tag bewertet. Nur, wo das GEDCOM-Datum mitkommt (Ereignisse).
+        if (!$date->isOK() && $gedcom !== '' && GedcomText::isDatePhrase($gedcom)) {
+            return [
+                'text'     => $this->plain(trim($gedcom, " ()")),
+                'year'     => 0,
+                'jd'       => 0,
+                'calendar' => 'gregorian',
+                'gedcom'   => $gedcom,
+            ];
+        }
+
         if (!$date->isOK()) {
             return null;
         }

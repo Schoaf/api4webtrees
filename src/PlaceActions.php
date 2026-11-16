@@ -276,6 +276,7 @@ trait PlaceActions
                 'sex'      => $this->sexCode($e['record']),
                 'private'  => false,
                 'lifespan' => $this->plain($e['record']->lifespan()),
+                'lifespanGedcom' => $this->lifespanGedcom($e['record']),
                 'url'      => $e['record']->url(),
                 'facts'    => $events($e['facts']),
             ], array_slice($individuals, 0, self::LINKED_RECORDS_LIMIT)),

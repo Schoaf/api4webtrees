@@ -63,7 +63,11 @@ ROUTEN = [
      "the facts, also while a change of sex is pending. From level 38 each media entry has `crop`: the GEDCOM 7 crop "
      "(`2 CROP`) of this link as `{top, left, height, width}` in pixels (a missing value is `null`), else `null` – the "
      "part of the image that shows this individual. From level 39 a `thumb` (of this individual and of everyone in the "
-     "answers that carry one) shows that part when the link to the main photo has a crop – see `Portrait`.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "answers that carry one) shows that part when the link to the main photo has a crop – see `Portrait`. From level 44 the "
+     "person (and every individual in lists, families and place answers) has `lifespanGedcom` `{birth, death}`: the "
+     "dates behind `lifespan` as stored, e.g. `ABT 1865`, `BET 1915 AND 1918` (`null` where there is none) – `lifespan` "
+     "shows only the years, so a client can mark uncertain ones; `birth.date` and `death.date` carry them as `gedcom`. "
+     "A date that is only text in brackets (`(about 1900)`) comes with that text, `year` 0 and `jd` 0.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",
@@ -187,7 +191,10 @@ ROUTEN = [
      "with this place, the Ortsregister binding, or the `_LOC` name along its hierarchy); the same for places in AddIndividual and Link.",
      [XREF], "`{factId?, tag, value?, date?, place?, address?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
      "`type` (level 20) sets the fact's TYPE; for MARR in webtrees' form (civil → CIVIL, religious → RELIGIOUS, PARTNERS, COMMON LAW). "
-     "`address` (level 33) sets the address `2 ADDR` of the event (lines as `3 CONT`), empty removes it; facts return it as `address`."),
+     "`address` (level 33) sets the address `2 ADDR` of the event (lines as `3 CONT`), empty removes it; facts return it as `address`. "
+     "`date` (level 44): keywords, months and calendar escapes are written in capitals (`abt 1865` → `ABT 1865`), text in brackets "
+     "stays as entered (`INT 1900 (shortly after New Year)`), a date of only bracketed text is accepted; changing the date keeps "
+     "its sub-lines (`3 TIME`), an empty date removes them with it. The same for dates in AddIndividual, AddSpouse and Citation."),
     ("post", "Association", True, 20, "editor",
      "Write godparents, witnesses and other associates of a fact. `linked` replaces the linked individuals (`2 _ASSO` + "
      "`3 RELA`, written as webtrees does: `godparent`/`witness`; `other` needs `rela`); an individual already linked keeps "
