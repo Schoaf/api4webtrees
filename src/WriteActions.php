@@ -1547,6 +1547,23 @@ trait WriteActions
             }
         }
 
+        // Ab Stufe n: nameParts - Objekt mit den Feldern aus NAME_PARTS, je Text oder null
+        if (array_key_exists('nameParts', $body)) {
+            if (!is_array($body['nameParts']) || array_is_list($body['nameParts']) && $body['nameParts'] !== []) {
+                return ['', 'invalid-name'];
+            }
+
+            foreach ($body['nameParts'] as $field => $part) {
+                if (!in_array($field, self::NAME_PARTS, true) || $part !== null && !is_string($part)) {
+                    return ['', 'invalid-name'];
+                }
+
+                if (GedcomText::looksLikePointer((string) $part)) {
+                    return ['', 'invalid-value'];
+                }
+            }
+        }
+
         if ($this->str($body, 'gedcom') !== '') {
             $gedcom = trim(str_replace("\r", '', $this->str($body, 'gedcom')));
         } else {
@@ -1563,6 +1580,9 @@ trait WriteActions
      */
     private function buildFactGedcom(array $body, string $old): string
     {
+        // Ab Stufe n: mit nameParts schreibt der Client die Teile eines Namens selbst; dann leitet der Server nichts
+        // mehr aus dem Wert ab (GIVN, SURN, NSFX, Spitzname) - ein nicht gesendeter Teil bleibt, wie er ist.
+        $has_parts = is_array($body['nameParts'] ?? null);
         if ($old === '') {
             $tag    = strtoupper(GedcomText::line($this->str($body, 'tag')));
             $value  = GedcomText::multiline($this->str($body, 'value'), 2);
@@ -1578,7 +1598,7 @@ trait WriteActions
                 // Spitzname aus der Anzeige: Das Modul zeigt 2 NICK in Anfuehrungszeichen im Namen ("Johannes \"Jan\" de Vries",
                 // siehe recordName). Hatte der gespeicherte Name keine Anfuehrungszeichen, ist ein solcher Teil der Spitzname -
                 // er gehoert nach 2 NICK, nicht in den Namen (bis 1.28.0 landete er im Namen und in GIVN).
-                if ($tag === 'NAME' && !str_contains($gedcom, '"') && preg_match('/^([^\/]*?)\s*"([^"]*)"\s*([^\/]*)(\/.*)?$/s', $value, $nick_match) === 1) {
+                if ($tag === 'NAME' && !$has_parts && !str_contains($gedcom, '"') && preg_match('/^([^\/]*?)\s*"([^"]*)"\s*([^\/]*)(\/.*)?$/s', $value, $nick_match) === 1) {
                     $nickname = trim($nick_match[2]);
                     $value    = trim(trim($nick_match[1]) . ' ' . trim($nick_match[3])) . (($nick_match[4] ?? '') === '' ? '' : ' ' . $nick_match[4]);
                     $value    = trim($value);
@@ -1591,7 +1611,7 @@ trait WriteActions
 
                 // GIVN, SURN und NSFX stehen im Namen selbst und werden unten neu gesetzt. Spitzname und Praefixe
                 // (NICK, NPFX, SPFX) lassen sich nicht aus dem Namen ableiten - sie bleiben, wie alles andere darunter.
-                if ($tag === 'NAME') {
+                if ($tag === 'NAME' && !$has_parts) {
                     $rest = (string) preg_replace('/\n2 (GIVN|SURN|NSFX) .*/', '', $rest);
                 }
             }
@@ -1605,7 +1625,7 @@ trait WriteActions
             }
         }
 
-        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', preg_match('/^1 NAME (.*)/', $gedcom, $line) === 1 ? $line[1] : '', $match) === 1) {
+        if ($tag === 'NAME' && !$has_parts && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', preg_match('/^1 NAME (.*)/', $gedcom, $line) === 1 ? $line[1] : '', $match) === 1) {
             // GIVN nie mit einem Teil in Anfuehrungszeichen - der ist ein Spitzname, kein Vorname
             $given = trim((string) preg_replace('/\s*"[^"]*"\s*/', ' ', $match[1]));
             // Ein vorhandenes Praefix ("Dr.") steht vorn im Namen, gehoert aber nicht zu den Vornamen.
@@ -1622,6 +1642,25 @@ trait WriteActions
             $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . ($surname === '' ? '' : "\n2 SURN " . $surname)
                 . (trim($match[3]) === '' ? '' : "\n2 NSFX " . trim($match[3]));
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
+        }
+
+        // Namensteile (ab Stufe n): gesendet = setzen (leer oder null entfernt die Zeile samt Unterzeilen), nicht gesendet = bleibt
+        if ($tag === 'NAME' && $has_parts) {
+            foreach (array_reverse(self::NAME_PARTS, true) as $gedcom_tag => $field) {
+                if (!array_key_exists($field, $body['nameParts'])) {
+                    continue;
+                }
+
+                $part = GedcomText::line((string) $body['nameParts'][$field]);
+
+                if ($part === '') {
+                    $gedcom = (string) preg_replace('/\n2 ' . $gedcom_tag . ' .*(\n[3-9] .*)*/', '', $gedcom);
+                } elseif (preg_match('/\n2 ' . $gedcom_tag . ' .*/', $gedcom) === 1) {
+                    $gedcom = (string) preg_replace_callback('/\n2 ' . $gedcom_tag . ' .*/', static fn (): string => "\n2 " . $gedcom_tag . ' ' . $part, $gedcom, 1);
+                } else {
+                    $gedcom = GedcomText::insertAfterFirstLine($gedcom, "\n2 " . $gedcom_tag . ' ' . $part);
+                }
+            }
         }
 
         if (array_key_exists('place', $body)) {

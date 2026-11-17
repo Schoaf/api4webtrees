@@ -1631,6 +1631,48 @@ class Schreiben(unittest.TestCase):
         self.assertIsNone(next(f for f in self.fakten(s, p) if f["tag"] == "SEX")["nameParts"])
         self.assertEqual([], [d for n in namen for d in n["details"] if d["tag"] in ("NPFX", "GIVN", "NICK", "SPFX", "SURN", "NSFX", "_RUFNAME")])
 
+    def test_namensteile_schreiben(self):
+        """Stufe n: nameParts beim Aendern eines NAME-Fakts - gesendet wird gesetzt, leer entfernt, nicht gesendet bleibt (Issue #28)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Hans", "surname": "Muster", "sex": "M", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+        name = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+        a = s.post("Fact", "testbaum", {"factId": name["id"], "gedcom": "1 NAME Hans /Muster/\n2 GIVN Hans Peter Josef\n2 SURN Muster\n2 NICK Hansi"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+
+        def teile():
+            n = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+            return n["id"], n["value"], n["nameParts"]
+
+        fid, _, _ = teile()
+        # nur Familienname aendern: GIVN bleibt, auch wenn er vom Anzeigenamen abweicht
+        a = s.post("Fact", "testbaum", {"factId": fid, "value": "Hans /Beispiel/", "nameParts": {"surname": "Beispiel"}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        fid, wert, t = teile()
+        self.assertEqual("Hans /Beispiel/", wert)
+        self.assertEqual(("Hans Peter Josef", "Beispiel", "Hansi"), (t["given"], t["surname"], t["nickname"]))
+        # Teile setzen, entfernen (null und leer), andere bleiben
+        a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": {"prefix": "Dr.", "nickname": None, "suffix": "jr.", "callName": "Hans"}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        fid, wert, t = teile()
+        self.assertEqual("Hans /Beispiel/", wert)
+        self.assertEqual({"prefix": "Dr.", "given": "Hans Peter Josef", "nickname": None, "surnamePrefix": None, "surname": "Beispiel",
+                          "suffix": "jr.", "callName": "Hans"}, t)
+        a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": {"suffix": "", "prefix": None}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual((None, None, "Hans Peter Josef"), (teile()[2]["prefix"], teile()[2]["suffix"], teile()[2]["given"]))
+        # ohne nameParts wie bisher: GIVN aus dem Wert
+        fid = teile()[0]
+        a = s.post("Fact", "testbaum", {"factId": fid, "value": "Hans /Neu/"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual(("Hans", "Neu"), (teile()[2]["given"], teile()[2]["surname"]))
+        # ungueltig
+        fid = teile()[0]
+        for kaputt, code in (({"gibbet": "x"}, "invalid-name"), ({"given": 5}, "invalid-name"), (["Hans"], "invalid-name"), ({"given": "@I1@"}, "invalid-value")):
+            a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": kaputt}, xref=p)
+            self.assertEqual(code, a.json.get("error"), (kaputt, a))
+
     def test_app_liste_gueltig(self):
         """src/Apps.php: jeder Eintrag vollstaendig, https, Schema eindeutig - die Pruefung, die ein Pull Request bestehen muss."""
         modul = os.path.join(umgebung.HIER, "..")

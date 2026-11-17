@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased – level n
+**Write the parts of a name (issue #28).** `POST Fact` on a `NAME` fact also accepts `nameParts`
+`{prefix, given, nickname, surnamePrefix, surname, suffix, callName}`, written as stored (`NPFX`, `GIVN`, `NICK`, `SPFX`,
+`SURN`, `NSFX`, `_RUFNAME`). A part that is sent is set, one sent as `null` or empty removes its line (with sub-lines), a
+part that is not sent stays as it is. With `nameParts` the server derives nothing from `value`, so a client can change the
+displayed name and the parts each on their own – e.g. `Hans /Beispiel/` with `{surname: "Beispiel"}` keeps `GIVN Hans Peter
+Josef`. Without `nameParts` writing works as before (`GIVN`, `SURN`, `NSFX` come from the value). Invalid `nameParts`:
+`invalid-name`; a part of the form `@X@`: `invalid-value`. Also for a new `NAME` fact.
+
 ## 1.28.1 – 2026-11-16
 **Fix – writing a name through `value` (route Fact).** With `2 SPFX von` a name `/von Berg/` was stored as `SURN von Berg`;
 now `SURN Berg`, as GEDCOM intends (the prefix before the given names, NPFX, was already handled). A nickname in quotes –
