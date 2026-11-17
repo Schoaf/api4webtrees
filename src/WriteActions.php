@@ -7,7 +7,6 @@ namespace Api4Webtrees;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Exceptions\FileUploadException;
-use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\FlashMessages;
@@ -569,7 +568,7 @@ trait WriteActions
             }
         }
 
-        if (array_key_exists('date', $body) && $this->str($body, 'date') !== '' && !(new Date(strtoupper($this->str($body, 'date'))))->isOK()) {
+        if (array_key_exists('date', $body) && $this->str($body, 'date') !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, 'date')))) {
             return $this->error(400, 'invalid-date');
         }
 
@@ -670,12 +669,14 @@ trait WriteActions
         if (array_key_exists('date', $body) || array_key_exists('text', $body)) {
             // DATA buendelt Datum und Text der Fundstelle; nicht genannte Teile aus dem alten DATA uebernehmen
             $existing_data = GedcomText::subrecords($rest, $sub_level, 'DATA')[0][1] ?? '';
-            $date    = array_key_exists('date', $body) ? strtoupper(GedcomText::line($this->str($body, 'date'))) : (GedcomText::subrecords($existing_data, $sub_level + 1, 'DATE')[0][0] ?? '');
+            $old_date = GedcomText::subrecords($existing_data, $sub_level + 1, 'DATE')[0] ?? ['', ''];
+            $date     = array_key_exists('date', $body) ? GedcomText::date($this->str($body, 'date')) : $old_date[0];
             $text     = array_key_exists('text', $body) ? $this->str($body, 'text') : GedcomText::firstValue(ltrim($existing_data, "\n"), $sub_level + 1, 'TEXT');
             $data     = '';
 
             if ($date !== '') {
-                $data .= "\n" . ($sub_level + 1) . ' DATE ' . $date;
+                // Unterzeilen des alten Datums (TIME) bleiben, auch wenn sich das Datum aendert
+                $data .= "\n" . ($sub_level + 1) . ' DATE ' . $date . $old_date[1];
             }
 
             if (trim($text) !== '') {
@@ -903,7 +904,7 @@ trait WriteActions
         }
 
         foreach (['birthDate', 'deathDate', 'marriageDate'] as $key) {
-            if ($this->str($body, $key) !== '' && !(new Date($this->str($body, $key)))->isOK()) {
+            if ($this->str($body, $key) !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, $key)))) {
                 return $this->error(400, 'invalid-date');
             }
         }
@@ -1003,7 +1004,7 @@ trait WriteActions
             return $this->error(400, 'invalid-relation');
         }
 
-        if ($this->str($body, 'marriageDate') !== '' && !(new Date($this->str($body, 'marriageDate')))->isOK()) {
+        if ($this->str($body, 'marriageDate') !== '' && !GedcomText::dateIsValid(GedcomText::date($this->str($body, 'marriageDate')))) {
             return $this->error(400, 'invalid-date');
         }
 
@@ -1392,7 +1393,7 @@ trait WriteActions
         // Ein Schreibvorgang statt einem je Verknuepfung - also auch nur eine ausstehende Aenderung.
         $lines = ['0 @' . $record->xref() . '@ ' . $record->tag()];
 
-        foreach ($record->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
+        foreach ($record->facts([], false, Compat::hidden(), true) as $fact) {
             if (!in_array($fact, $links, true)) {
                 $lines[] = $fact->gedcom();
             }
@@ -1589,7 +1590,7 @@ trait WriteActions
             return $this->error(404, 'link-not-found');
         }
 
-        $first = $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->first();
+        $first = $record->facts(['OBJE'], false, Compat::hidden(), true)->first();
 
         // Ab Stufe 35 auch nach GEDCOM-L: "2 _PRIM Y" an diesem Verweis, an den anderen Verweisen faellt _PRIM weg -
         // so zeigen andere Programme dasselbe Hauptbild wie webtrees (das erste Bild).
@@ -1599,7 +1600,7 @@ trait WriteActions
             return substr($gedcom, 1);
         };
         $schon = $first === $links[0] && strtoupper(trim($links[0]->attribute('_PRIM'))) === 'Y'
-            && $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)->filter(static fn (Fact $f): bool => $f !== $links[0] && $f->attribute('_PRIM') !== '')->isEmpty();
+            && $record->facts(['OBJE'], false, Compat::hidden(), true)->filter(static fn (Fact $f): bool => $f !== $links[0] && $f->attribute('_PRIM') !== '')->isEmpty();
 
         if ($schon) {
             return $this->written($record);
@@ -1607,7 +1608,7 @@ trait WriteActions
 
         $lines = ['0 @' . $record->xref() . '@ ' . $record->tag()];
 
-        foreach ($record->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
+        foreach ($record->facts([], false, Compat::hidden(), true) as $fact) {
             if ($fact === $first) {
                 $lines[] = $prim($links[0], true);
             }
@@ -1633,7 +1634,7 @@ trait WriteActions
             return [];
         }
 
-        return $record->facts(['OBJE'], false, Auth::PRIV_HIDE, true)
+        return $record->facts(['OBJE'], false, Compat::hidden(), true)
             ->filter(static fn (Fact $fact): bool => $fact->value() === '@' . $media_xref . '@')
             ->values()
             ->all();
@@ -1655,6 +1656,23 @@ trait WriteActions
             }
         }
 
+        // Ab Stufe 46: nameParts - Objekt mit den Feldern aus NAME_PARTS, je Text oder null
+        if (array_key_exists('nameParts', $body)) {
+            if (!is_array($body['nameParts']) || array_is_list($body['nameParts']) && $body['nameParts'] !== []) {
+                return ['', 'invalid-name'];
+            }
+
+            foreach ($body['nameParts'] as $field => $part) {
+                if (!in_array($field, self::NAME_PARTS, true) || $part !== null && !is_string($part)) {
+                    return ['', 'invalid-name'];
+                }
+
+                if (GedcomText::looksLikePointer((string) $part)) {
+                    return ['', 'invalid-value'];
+                }
+            }
+        }
+
         if ($this->str($body, 'gedcom') !== '') {
             $gedcom = trim(str_replace("\r", '', $this->str($body, 'gedcom')));
         } else {
@@ -1671,6 +1689,9 @@ trait WriteActions
      */
     private function buildFactGedcom(array $body, string $old): string
     {
+        // Ab Stufe 46: mit nameParts schreibt der Client die Teile eines Namens selbst; dann leitet der Server nichts
+        // mehr aus dem Wert ab (GIVN, SURN, NSFX, Spitzname) - ein nicht gesendeter Teil bleibt, wie er ist.
+        $has_parts = is_array($body['nameParts'] ?? null);
         if ($old === '') {
             $tag    = strtoupper(GedcomText::line($this->str($body, 'tag')));
             $value  = GedcomText::multiline($this->str($body, 'value'), 2);
@@ -1682,29 +1703,73 @@ trait WriteActions
 
             if (array_key_exists('value', $body)) {
                 $value  = GedcomText::multiline($this->str($body, 'value'), 2);
+
+                // Spitzname aus der Anzeige: Das Modul zeigt 2 NICK in Anfuehrungszeichen im Namen ("Johannes \"Jan\" de Vries",
+                // siehe recordName). Hatte der gespeicherte Name keine Anfuehrungszeichen, ist ein solcher Teil der Spitzname -
+                // er gehoert nach 2 NICK, nicht in den Namen (bis 1.28.0 landete er im Namen und in GIVN).
+                if ($tag === 'NAME' && !$has_parts && !str_contains($gedcom, '"') && preg_match('/^([^\/]*?)\s*"([^"]*)"\s*([^\/]*)(\/.*)?$/s', $value, $nick_match) === 1) {
+                    $nickname = trim($nick_match[2]);
+                    $value    = trim(trim($nick_match[1]) . ' ' . trim($nick_match[3])) . (($nick_match[4] ?? '') === '' ? '' : ' ' . $nick_match[4]);
+                    $value    = trim($value);
+                    $nick_new = $nickname === '' ? null : $nickname;
+                }
+
                 $gedcom = '1 ' . $tag . ($value === '' ? '' : ' ' . $value);
                 // Fortsetzungszeilen des alten Werts entfernen
                 $rest = (string) preg_replace('/^(\n2 CONT ?.*)+/', '', $rest);
 
                 // GIVN, SURN und NSFX stehen im Namen selbst und werden unten neu gesetzt. Spitzname und Praefixe
                 // (NICK, NPFX, SPFX) lassen sich nicht aus dem Namen ableiten - sie bleiben, wie alles andere darunter.
-                if ($tag === 'NAME') {
+                if ($tag === 'NAME' && !$has_parts) {
                     $rest = (string) preg_replace('/\n2 (GIVN|SURN|NSFX) .*/', '', $rest);
                 }
             }
 
             $gedcom .= $rest;
+
+            if (isset($nick_new)) {
+                $gedcom = preg_match('/\n2 NICK .*/', $gedcom) === 1
+                    ? (string) preg_replace_callback('/\n2 NICK .*/', static fn (): string => "\n2 NICK " . $nick_new, $gedcom, 1)
+                    : $gedcom . "\n2 NICK " . $nick_new;
+            }
         }
 
-        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', $this->str($body, 'value'), $match) === 1) {
-            $given = trim($match[1]);
+        if ($tag === 'NAME' && !$has_parts && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', preg_match('/^1 NAME (.*)/', $gedcom, $line) === 1 ? $line[1] : '', $match) === 1) {
+            // GIVN nie mit einem Teil in Anfuehrungszeichen - der ist ein Spitzname, kein Vorname
+            $given = trim((string) preg_replace('/\s*"[^"]*"\s*/', ' ', $match[1]));
             // Ein vorhandenes Praefix ("Dr.") steht vorn im Namen, gehoert aber nicht zu den Vornamen.
             if (preg_match('/\n2 NPFX (.+)/', $gedcom, $npfx) === 1 && str_starts_with($given, trim($npfx[1]) . ' ')) {
                 $given = trim(substr($given, strlen(trim($npfx[1]))));
             }
-            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]))
+            // Ebenso ein Vorsatz ("von", "de la") vor dem Familiennamen: SURN ohne ihn, wie GEDCOM es vorsieht
+            $surname = trim($match[2]);
+            if (preg_match('/\n2 SPFX (.+)/', $gedcom, $spfx) === 1 && str_starts_with($surname, trim($spfx[1]) . ' ')) {
+                $surname = trim(substr($surname, strlen(trim($spfx[1]))));
+            }
+            // _RUFNAME bleibt bewusst stehen, auch wenn er nicht woertlich unter den Vornamen steht: eine korrigierte
+            // Schreibweise ("Heinrich" -> "Hinrich") wuerde ihn sonst still loeschen (tests: GedcomL verliert nichts).
+            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . ($surname === '' ? '' : "\n2 SURN " . $surname)
                 . (trim($match[3]) === '' ? '' : "\n2 NSFX " . trim($match[3]));
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
+        }
+
+        // Namensteile (ab Stufe 46): gesendet = setzen (leer oder null entfernt die Zeile samt Unterzeilen), nicht gesendet = bleibt
+        if ($tag === 'NAME' && $has_parts) {
+            foreach (array_reverse(self::NAME_PARTS, true) as $gedcom_tag => $field) {
+                if (!array_key_exists($field, $body['nameParts'])) {
+                    continue;
+                }
+
+                $part = GedcomText::line((string) $body['nameParts'][$field]);
+
+                if ($part === '') {
+                    $gedcom = (string) preg_replace('/\n2 ' . $gedcom_tag . ' .*(\n[3-9] .*)*/', '', $gedcom);
+                } elseif (preg_match('/\n2 ' . $gedcom_tag . ' .*/', $gedcom) === 1) {
+                    $gedcom = (string) preg_replace_callback('/\n2 ' . $gedcom_tag . ' .*/', static fn (): string => "\n2 " . $gedcom_tag . ' ' . $part, $gedcom, 1);
+                } else {
+                    $gedcom = GedcomText::insertAfterFirstLine($gedcom, "\n2 " . $gedcom_tag . ' ' . $part);
+                }
+            }
         }
 
         if (array_key_exists('place', $body)) {
@@ -1726,9 +1791,17 @@ trait WriteActions
         }
 
         if (array_key_exists('date', $body)) {
-            $date   = strtoupper(GedcomText::line($this->str($body, 'date')));
-            $gedcom = (string) preg_replace('/\n2 DATE.*(\n[3-9] .*)*/', '', $gedcom);
-            $gedcom = GedcomText::insertAfterFirstLine($gedcom, $date === '' ? '' : "\n2 DATE " . $date);
+            $date = GedcomText::date($this->str($body, 'date'));
+
+            if ($date === '') {
+                // Datum geloescht: samt seinen Unterzeilen (3 TIME ...), die ohne Datum nichts bedeuten
+                $gedcom = (string) preg_replace('/\n2 DATE.*(\n[3-9] .*)*/', '', $gedcom);
+            } elseif (preg_match('/\n2 DATE.*/', $gedcom) === 1) {
+                // Nur die Zeile selbst ersetzen - Unterzeilen wie "3 TIME 10:30" bleiben (bis 1.27.0 gingen sie verloren)
+                $gedcom = (string) preg_replace_callback('/\n2 DATE.*/', static fn (): string => "\n2 DATE " . $date, $gedcom, 1);
+            } else {
+                $gedcom = GedcomText::insertAfterFirstLine($gedcom, "\n2 DATE " . $date);
+            }
         }
 
         // Art des Ereignisses (ab Stufe 20), bei der Heirat in webtrees' Form: CIVIL, RELIGIOUS, PARTNERS, COMMON LAW

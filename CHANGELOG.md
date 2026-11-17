@@ -5,7 +5,113 @@
 wrong way round. GEDCOM has no rotation, so the file is overwritten with the turned image; the crop of every link to it turns
 along, so each marked frame stays on the same face. Nothing is turned while a link with a crop can't be changed by the user.
 
-**Level n – `Info.user.language`:** the language the signed-in user chose under “My account” (`de`, `en-GB` …; empty for
+## 1.29.0 – 2026-11-17
+**Level 46 – write the parts of a name (issue #28).** `POST Fact` on a `NAME` fact also accepts `nameParts`
+`{prefix, given, nickname, surnamePrefix, surname, suffix, callName}`, written as stored (`NPFX`, `GIVN`, `NICK`, `SPFX`,
+`SURN`, `NSFX`, `_RUFNAME`). A part that is sent is set, one sent as `null` or empty removes its line (with sub-lines), a
+part that is not sent stays as it is. With `nameParts` the server derives nothing from `value`, so a client can change the
+displayed name and the parts each on their own – e.g. `Hans /Beispiel/` with `{surname: "Beispiel"}` keeps `GIVN Hans Peter
+Josef`. Without `nameParts` writing works as before (`GIVN`, `SURN`, `NSFX` come from the value). Invalid `nameParts`:
+`invalid-name`; a part of the form `@X@`: `invalid-value`. Also for a new `NAME` fact.
+
+## 1.28.1 – 2026-11-16
+**Fix – writing a name through `value` (route Fact).** With `2 SPFX von` a name `/von Berg/` was stored as `SURN von Berg`;
+now `SURN Berg`, as GEDCOM intends (the prefix before the given names, NPFX, was already handled). A nickname in quotes –
+the way the module shows `2 NICK` in names (`Johannes "Jan" de Vries`) – ended up in the name and in `GIVN` when an app
+sent the shown name back; now `GIVN` never contains a quoted part, and if the stored name had no quotes, the quoted part
+goes to `2 NICK` (added or replaced) instead of into the name. `_RUFNAME` stays as before, also when it is no longer
+literally among the given names – a corrected spelling (Heinrich → Hinrich) must not drop it.
+
+## 1.28.0 – 2026-11-16
+**Level 45 – all parts of every name (issue #27).** Each `NAME` fact now has `nameParts` `{prefix, given, nickname,
+surnamePrefix, surname, suffix, callName}`: the lines `2 NPFX`, `GIVN`, `NICK`, `SPFX`, `SURN`, `NSFX` and `_RUFNAME` as
+stored, `null` where a line is missing – for every name (birth name, married name …), not only the first. Until now these
+lines were left out of `details` because they were meant to have fields of their own, which never existed; only
+`given`/`surname` of the primary name were available on the person. Other facts have `nameParts: null`.
+
+**Level 44 – uncertain dates (app4webtrees#44).** Every individual (in `Individual`, lists, families and place answers)
+has `lifespanGedcom` `{birth, death}`: the dates behind `lifespan` as stored, e.g. `ABT 1865` or `BET 1915 AND 1918`
+(`null` where there is none; same choice and privacy as webtrees' lifespan). `lifespan` shows only the years, so a client
+can now mark uncertain ones. In `Individual`, `person.birth.date` and `person.death.date` also carry `gedcom`. A date that is
+only text in brackets (`(about 1900)`) is now accepted when writing and comes back with that text, `year` 0 and `jd` 0.
+
+**Fix – text in dates was written in capitals.** Writing a date (Fact, Citation, AddIndividual, AddSpouse) capitalised
+all of it, so `INT 1900 (shortly after New Year)` became `(SHORTLY AFTER NEW YEAR)`. Now only keywords, months and
+calendar escapes are capitalised; text in brackets stays as entered. Lower-case input such as `abt 1865` is now accepted
+in AddIndividual and AddSpouse as well.
+
+**Fix – changing a date dropped its sub-lines.** Changing the date of a fact through `Fact` removed `3 TIME` and other
+lines under `2 DATE`; they now stay. An empty date removes the date together with its sub-lines, as before. The date of a
+citation keeps its sub-lines in the same way.
+
+## 1.27.0 – 2026-11-14
+**Runs on webtrees 2.2.6 and on the development state of 2.3.** Tested against webtrees main of 2026-11-04 (2.3.0-dev);
+2.3 is not released and may still change. webtrees main removed or retyped several things
+the module used: `Auth::PRIV_*` and `Individual::sex()` became enums (`AccessLevel`, `Sex`), `I18N::comparator()`,
+`I18N::activeLocales()`, `Fact::sortFacts()`, `ImageFactory::thumbnailNeedsWatermark()` and the calendar `ESCAPE` constants
+are gone, the control-panel request handlers moved, Intervention Image is no longer bundled, and the `response()` helper
+takes an enum status code. All version switches live in the new `src/Compat.php`; each one checks at run time what the
+installation offers, so the same ZIP works on both versions. The portrait crop uses GD directly when Intervention Image
+is missing. No change to the API.
+
+**Behaviour change, also on 2.2.6:** when webtrees itself rejects a request to the module before the module sees it
+(an `HttpException`), the module now answers with JSON like all its other errors instead of letting webtrees render its
+HTML error page. A tree that does not exist or that the user may not see gives `{"ok": false, "error": "not-found",
+"status": 404}` (a guest cannot tell whether a private tree exists); an unknown action gives `not-found` as well, other
+rejections `bad-request` 400 or `forbidden` 403 with webtrees' status. Apps that parsed the HTML page (none known) must read the JSON.
+
+**Fix:** the notes of a source that point to a note record (`1 NOTE @N1@`) came as the raw pointer instead of the note's
+text in `Source` (missing class import). Test added.
+
+The test setup (`tests/umgebung.py`) now sends a `base_url` to the setup wizard, which webtrees main requires.
+
+## 1.26.0 – 2026-11-11
+**Level 43 – calendar of a date (issue #43).** Every `date` object now has `calendar` – the calendar the date is written in
+(`gregorian`, `julian`, `jewish`, `french`, `hijri`, `jalali`, `roman`). `Anniversaries` also gives `date.gedcom`, the
+date as stored (`@#DHEBREW@ 15 TSH 5700`). webtrees already finds an event on the day it falls in any calendar, so a
+person with the same event in two calendars appeared twice and an app could not tell the entries apart. No new route;
+older clients ignore the extra fields.
+
+**Who sees the app note and the footer link (issue #26).** The settings have a choice *Show the note and the footer
+link to*: all signed-in users (default, as before), editors and above, moderators and above, managers and above,
+administrators only, or nobody. For a site where only a few people use the apps, the others no longer see app
+promotion. Only the display changes: the “App” page stays reachable, and who may use the apps is still set by the
+rights in webtrees. Not an API change.
+
+## 1.25.1 – 2026-11-01
+**Documentation only – the module code is the same as 1.25.0** (it still reports `1.25.0`; no new ZIP, keep using
+`api4webtrees-v1.25.0.zip`). `docs/openapi.json` described several answers too narrowly: the response schemas are
+derived from real answers, and the small test tree never had coordinates at most places, occupations of children,
+or a pedigree without siblings – so those fields were documented as “always `null`” or as required. Answers from an
+ordinary tree failed the schema although nothing was wrong. Now a field only ever seen empty has no type
+restriction, and the schemas are derived from the test tree **and** the demo tree Falkenrath 1.7 (CC0, 492
+individuals). The new schema is stricter elsewhere (more required fields, more closed objects). `openapi.json`
+has `info.version` 1.25.1 and `info.x-module-version` 1.25.0. No change to any answer or to the API level (42).
+
+## 1.25.0 – 2026-10-30
+**Level 42 – Messages:** webtrees' own messaging as JSON, so an app has an inbox and can share a record with a fellow
+researcher as a message with the link. `GET Messages` lists the signed-in user's inbox (50 per page): `text` is the
+message alone (webtrees stores the mail wording around it), `url` the page it was sent from, `links` every record of
+this server mentioned in text or URL, resolved to `type` and `xref` (`null` when the reader may not see it), and
+`recipients` the users one can write to – the list of the “Messages” block, without accounts that have no contact
+method (webtrees would deliver nothing to them). `POST Messages {to, subject?, body, url?}` sends through webtrees'
+MessageService as the signed-in user (internal, e-mail or both, as the recipient chose; no broadcast). `POST
+MessageDelete {ids}` deletes own messages. `Info.user.messages` counts the inbox. Errors `missing-to`, `unknown-user`,
+`contact-none`, `missing-body`, `send-failed`, `missing-ids`.
+
+## 1.24.0 – 2026-10-29
+API level 41.
+**“App” page:** only the first app for the visitor's device is open, the others fold to one line each – as documented
+since 1.10. Before, every app for the device was open, which made the page long on Android with two apps.
+**Search finds nicknames:** `GET Individuals?q=` also matches the nickname (`2 NICK`) of a name – “Piet” finds Pieter
+Bakker when his nickname is only recorded as NICK, as Dutch call names usually are. webtrees' own name index does not
+contain nicknames, so the module checks the GEDCOM text as well. No new field or parameter (app4webtrees #24).
+**Store badges:** the Google Play badge had a transparent margin of a sixth on every side and looked smaller than the
+App Store badge at the same height; it now has none, and both are equally high.
+**“App” page:** the note recommending the browser now shows on every device without an app the administrator left on
+(before only on Apple devices). It no longer names a computer or an Android phone, which may be switched off too, but
+points to the apps for other devices – and only if there are any.
+**Level 41 – `Info.user.language`:** the language the signed-in user chose under “My account” (`de`, `en-GB` …; empty for
 visitors and without a choice of their own) – so an app can start in the user's webtrees language on the first sign-in.
 
 **“App” page:** the note recommending the browser now shows on every device without an app the administrator left on

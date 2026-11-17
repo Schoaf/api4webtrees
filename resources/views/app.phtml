@@ -243,7 +243,7 @@ $none = Apps::matching($apps, $device) === [];
 <?php endif ?>
 
 <?php foreach ($apps as $app) : ?>
-    <?php if ($app['open']) : ?>
+    <?php if ($app['expanded']) : ?>
         <h3 class="h4 mt-4 mb-2"><?php $icon($app) ?><?= e($devices($app)) ?>: <?= e($app['name']) ?></h3>
         <?php $own_note($app) ?>
         <?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?>

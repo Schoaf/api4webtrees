@@ -14,6 +14,7 @@ use function preg_match;
 use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
+use function preg_split;
 use function str_contains;
 use function str_replace;
 use function strlen;
@@ -23,6 +24,7 @@ use function substr_count;
 use function trim;
 
 use const PREG_SET_ORDER;
+use const PREG_SPLIT_DELIM_CAPTURE;
 
 /**
  * Reine Textfunktionen fuer GEDCOM-Zeilen: bauen, pruefen, entschaerfen. Ohne webtrees-Zustand,
@@ -69,7 +71,7 @@ final class GedcomText
             }
         }
 
-        if (preg_match('/\n2 DATE (.+)/', $gedcom, $date_match) === 1 && !(new Date($date_match[1]))->isOK()) {
+        if (preg_match('/\n2 DATE (.+)/', $gedcom, $date_match) === 1 && !self::dateIsValid($date_match[1])) {
             return 'invalid-date';
         }
 
@@ -171,7 +173,7 @@ final class GedcomText
 
     public static function eventGedcom(string $tag, string $date, string $place, bool $happened): string
     {
-        $date  = strtoupper(self::line($date));
+        $date  = self::date($date);
         $place = self::line($place);
 
         if ($date === '' && $place === '') {
@@ -179,6 +181,41 @@ final class GedcomText
         }
 
         return "\n1 " . $tag . ($date === '' ? '' : "\n2 DATE " . $date) . ($place === '' ? '' : "\n2 PLAC " . $place);
+    }
+
+    /**
+     * Ein Datum in GEDCOM-Form, einzeilig: Schluesselwoerter, Monate und Kalender gross ("abt 1865" -> "ABT 1865",
+     * "@#djulian@" -> "@#DJULIAN@"), Text in Klammern bleibt, wie er ist ("INT 1900 (kurz nach Neujahr)").
+     * Bis 1.27.0 wurde das ganze Datum grossgeschrieben, auch der Freitext.
+     */
+    public static function date(string $value): string
+    {
+        // Abwechselnd Datumsteil und Klammertext; eine nicht geschlossene Klammer gilt bis zum Ende als Text
+        $parts = preg_split('/(\([^)]*(?:\)|$))/', self::line($value), -1, PREG_SPLIT_DELIM_CAPTURE);
+        $date  = '';
+
+        foreach ($parts === false ? [] : $parts as $i => $part) {
+            $date .= $i % 2 === 0 ? strtoupper($part) : $part;
+        }
+
+        return $date;
+    }
+
+    /**
+     * Ein Datum, das webtrees versteht - oder nur ein Datumstext in Klammern ("(um die Jahrhundertwende)"), den
+     * GEDCOM ebenso erlaubt und webtrees anzeigt, aber nicht als Datum rechnen kann.
+     */
+    public static function dateIsValid(string $date): bool
+    {
+        return self::isDatePhrase($date) || (new Date($date))->isOK();
+    }
+
+    /**
+     * Nur ein Datumstext in Klammern, ohne Datum davor.
+     */
+    public static function isDatePhrase(string $date): bool
+    {
+        return preg_match('/^\([^()]*\S[^()]*\)$/', trim($date)) === 1;
     }
 
     /**

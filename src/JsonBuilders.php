@@ -31,7 +31,6 @@ use function array_keys;
 use function array_map;
 use function array_pad;
 use function array_slice;
-use function class_exists;
 use function explode;
 use function implode;
 use function html_entity_decode;
@@ -64,6 +63,12 @@ trait JsonBuilders
         'GIVN', 'SURN', 'NPFX', 'SPFX', 'NSFX', 'NICK', '_RUFNAME',
     ];
 
+    // Ab Stufe 45: die Teile eines Namens (Unterzeilen von 1 NAME) und ihr Feld in nameParts
+    private const array NAME_PARTS = [
+        'NPFX' => 'prefix', 'GIVN' => 'given', 'NICK' => 'nickname', 'SPFX' => 'surnamePrefix', 'SURN' => 'surname',
+        'NSFX' => 'suffix', '_RUFNAME' => 'callName',
+    ];
+
     // Unter "1 ASSO": die Beziehung steht schon in associates
     private const array ASSOCIATE_FIELDS = ['RELA', 'ROLE'];
 
@@ -80,7 +85,7 @@ trait JsonBuilders
             }
         }
 
-        return $individual->sex();
+        return Compat::sex($individual);
     }
 
     /**
@@ -98,6 +103,8 @@ trait JsonBuilders
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),
             'lifespan' => $this->plain($individual->lifespan()),
+            // ab Stufe 44: die Daten hinter lifespan in GEDCOM-Form, um ungenaue Lebensjahre zu kennzeichnen
+            'lifespanGedcom' => $this->lifespanGedcom($individual),
             'thumb'    => $this->portraitUrl($individual),
             'url'      => $individual->url(),
         ];
@@ -122,6 +129,8 @@ trait JsonBuilders
         $given   = str_contains($primary['givn'] ?? '', '@') ? '' : $this->plain($primary['givn'] ?? '');
         $surname = str_contains($primary['surname'] ?? '', '@') ? '' : $this->plain($primary['surname'] ?? '');
 
+        $life = $this->lifespanGedcom($individual);
+
         $summary = [
             'xref'       => $individual->xref(),
             'name'       => $this->recordName($individual),
@@ -136,11 +145,13 @@ trait JsonBuilders
             // sehen duerften - fuer Buecher zum Weitergeben ("nur, was Besucher sehen")
             'access'     => $this->zugang($individual),
             // wer den Namen sehen darf - bei Lebenden haengt das an der Baumeinstellung "Namen Lebender zeigen"
-            'nameAccess' => $individual->canShowName(Auth::PRIV_PRIVATE) ? 'visitor' : ($individual->canShowName(Auth::PRIV_USER) ? 'member' : 'manager'),
+            'nameAccess' => $individual->canShowName(Compat::visitor()) ? 'visitor' : ($individual->canShowName(Compat::member()) ? 'member' : 'manager'),
             'restricted' => $this->eingeschraenkt($individual),
             'lifespan'   => $this->plain($individual->lifespan()),
-            'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace()),
-            'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace()),
+            // ab Stufe 44: die Daten hinter lifespan in GEDCOM-Form ("ABT 1865"); birth.date und death.date tragen sie als gedcom
+            'lifespanGedcom' => $life,
+            'birth'      => $this->eventJson($individual->getBirthDate(), $individual->getBirthPlace(), $life['birth'] ?? ''),
+            'death'      => $this->eventJson($individual->getDeathDate(), $individual->getDeathPlace(), $life['death'] ?? ''),
             // ab Stufe 14: Rufname, Taufe, Begraebnis und erster Beruf - fuer Tafeln und Listen, ohne die Person
             // einzeln abzurufen. facts() liefert fuer nicht sichtbare Personen nichts, dann bleibt alles leer.
             'call'       => $individual->canShowName() ? $this->callName($individual, $primary['full'] ?? '') : '',
@@ -175,7 +186,7 @@ trait JsonBuilders
 
         $crop = $this->portraitCrop($individual, $media_file);
 
-        if ($crop !== null && !Registry::imageFactory()->thumbnailNeedsWatermark($media_file, Auth::user())) {
+        if ($crop !== null && !Compat::needsWatermark($media_file, Auth::user())) {
             // crop im Adresstext: ein neuer Ausschnitt ist eine neue Adresse - Zwischenspeicher zeigen nichts Altes.
             return $this->actionUrl('Portrait', $individual->tree()->name(), ['xref' => $individual->xref(), 'crop' => substr(md5((string) json_encode($crop)), 0, 8)]);
         }
@@ -362,7 +373,7 @@ trait JsonBuilders
     private function factsJson(GedcomRecord $record): array
     {
         $tree  = $record->tree();
-        $facts = $this->sortFacts($record->facts());
+        $facts = Compat::sortFacts($record->facts());
         $data  = [];
 
         foreach ($facts as $fact) {
@@ -412,6 +423,9 @@ trait JsonBuilders
                 'noteXref'       => $tag === 'NOTE' && preg_match('/^@([^@]+)@$/', $fact->value(), $nx) === 1 ? $nx[1] : null,
                 // Ab Stufe 37: alle uebrigen Angaben des Fakts als Zeilen zum Anzeigen (Alter, Telefon, Abstammung ...)
                 'details'        => $this->factDetails($fact, $tree),
+                // Ab Stufe 45: bei NAME die Teile des Namens, wie sie darunter stehen - fuer jeden Namen, nicht nur den
+                // ersten (Geburts-, Ehe-, Rufname ...). Sonst null. Bis 1.27.0 kamen sie nirgends heraus (Issue #27).
+                'nameParts'      => $tag === 'NAME' ? $this->nameParts($fact) : null,
             ];
         }
 
@@ -456,11 +470,11 @@ trait JsonBuilders
      */
     private function zugang(GedcomRecord|Fact $x): string
     {
-        if ($x->canShow(Auth::PRIV_PRIVATE)) {
+        if ($x->canShow(Compat::visitor())) {
             return 'visitor';
         }
 
-        return $x->canShow(Auth::PRIV_USER) ? 'member' : 'manager';
+        return $x->canShow(Compat::member()) ? 'member' : 'manager';
     }
 
     /**
@@ -471,12 +485,12 @@ trait JsonBuilders
      */
     private function eingeschraenkt(Individual $individual): array
     {
-        if (!$individual->canShow(Auth::PRIV_PRIVATE)) {
+        if (!$individual->canShow(Compat::visitor())) {
             return [];
         }
         $tags = [];
         foreach ($individual->facts(['BIRT', 'CHR', 'BAPM', 'DEAT', 'BURI', 'CREM', 'OCCU']) as $fact) {
-            if (!$fact->canShow(Auth::PRIV_PRIVATE)) {
+            if (!$fact->canShow(Compat::visitor())) {
                 $tags[] = $this->shortTag($fact->tag());
             }
         }
@@ -649,7 +663,7 @@ trait JsonBuilders
     {
         $element = Registry::elementFactory()->make('INDI:*:_ASSO:RELA');
         $element = $element instanceof RelationIsDescriptor ? $element : new RelationIsDescriptor('');
-        $values  = $element->values($sex) + $element->values('U');
+        $values  = $element->values(Compat::sexArgument($sex)) + $element->values(Compat::sexArgument('U'));
         $key     = mb_strtolower(trim($rela));
 
         return $values[$key] ?? ($role === 'other' ? $rela : $values[$role] ?? $rela);
@@ -817,9 +831,38 @@ trait JsonBuilders
     /**
      * @return array<string,mixed>|null
      */
-    private function eventJson(Date $date, Place $place): array|null
+    /**
+     * Ab Stufe 44: Geburts- und Sterbedatum, aus denen webtrees die Lebensjahre (lifespan) bildet, so wie sie im GEDCOM
+     * stehen ("ABT 1865", "BET 1915 AND 1918") - lifespan zeigt nur die Jahre, ein Client kann so ungenaue kennzeichnen.
+     * Dieselbe Auswahl wie Individual::getBirthDate()/getDeathDate(): das erste gueltige Datum von BIRT, sonst CHR,
+     * BAPM (DEAT, BURI, CREM). Nur sichtbare Ereignisse (facts() wendet den Datenschutz an); null, wo es keins gibt.
+     *
+     * @return array{birth:string|null,death:string|null}
+     */
+    private function lifespanGedcom(Individual $individual): array
     {
-        $date_json  = $this->dateJson($date);
+        $first = static function (array $tags) use ($individual): string|null {
+            if (!$individual->canShow()) {
+                return null;
+            }
+
+            foreach ($tags as $tag) {
+                foreach ($individual->facts([$tag], false, null, true) as $fact) {
+                    if ($fact->date()->isOK()) {
+                        return $fact->attribute('DATE');
+                    }
+                }
+            }
+
+            return null;
+        };
+
+        return ['birth' => $first(['BIRT', 'CHR', 'BAPM']), 'death' => $first(['DEAT', 'BURI', 'CREM'])];
+    }
+
+    private function eventJson(Date $date, Place $place, string $gedcom = ''): array|null
+    {
+        $date_json  = $this->dateJson($date, $gedcom);
         $place_json = $this->placeJson($place, null, null);
 
         if ($date_json === null && $place_json === null) {
@@ -829,11 +872,33 @@ trait JsonBuilders
         return ['date' => $date_json, 'place' => $place_json];
     }
 
+    private const CALENDAR_NAMES = [
+        '@#DGREGORIAN@' => 'gregorian',
+        '@#DJULIAN@'    => 'julian',
+        '@#DHEBREW@'    => 'jewish',
+        '@#DFRENCH R@'  => 'french',
+        '@#DHIJRI@'     => 'hijri',
+        '@#DJALALI@'    => 'jalali',
+        '@#DROMAN@'     => 'roman',
+    ];
+
     /**
      * @return array<string,mixed>|null
      */
     private function dateJson(Date $date, string $gedcom = ''): array|null
     {
+        // Ab Stufe 44: ein Datum, das nur aus Text in Klammern besteht ("(um die Jahrhundertwende)"), kommt mit diesem Text,
+        // year 0 und jd 0 - wie webtrees ein Datum ohne Tag bewertet. Nur, wo das GEDCOM-Datum mitkommt (Ereignisse).
+        if (!$date->isOK() && $gedcom !== '' && GedcomText::isDatePhrase($gedcom)) {
+            return [
+                'text'     => $this->plain(trim($gedcom, " ()")),
+                'year'     => 0,
+                'jd'       => 0,
+                'calendar' => 'gregorian',
+                'gedcom'   => $gedcom,
+            ];
+        }
+
         if (!$date->isOK()) {
             return null;
         }
@@ -842,6 +907,8 @@ trait JsonBuilders
             'text' => $this->plain($date->display()),
             'year' => $date->gregorianYear(),
             'jd'   => $date->minimumJulianDay(),
+            // Kalender, in dem das Datum geschrieben ist (Stufe 43): gregorian, julian, jewish, french, hijri, jalali, roman
+            'calendar' => self::CALENDAR_NAMES[Compat::calendarEscape($date->minimumDate())] ?? 'gregorian',
         ];
 
         // Bei Ereignissen zusaetzlich das Datum, wie es im GEDCOM steht ("ABT 1850", "9 NOV 1957") - damit ein
@@ -1157,21 +1224,22 @@ trait JsonBuilders
     }
 
     /**
-     * webtrees 2.2: Fact::sortFacts() - ab 2.3: FactSortService::sort().
+     * Ab Stufe 45: die Teile eines Namens (2 NPFX, GIVN, NICK, SPFX, SURN, NSFX, _RUFNAME), wie sie im GEDCOM stehen;
+     * null, wo eine Zeile fehlt. Der Fakt selbst ist schon nach dem Datenschutz gefiltert - die Teile zeigen nichts,
+     * was nicht ohnehin in seinem Wert (dem vollen Namen) steht oder als Spitzname im angezeigten Namen.
      *
-     * @param Collection<int,Fact> $facts
-     *
-     * @return Collection<int,Fact>
+     * @return array<string,string|null>
      */
-    private function sortFacts(Collection $facts): Collection
+    private function nameParts(Fact $fact): array
     {
-        $service = 'Fisharebest\\Webtrees\\Services\\FactSortService';
+        $parts = [];
 
-        if (class_exists($service)) {
-            return Registry::container()->get($service)->sort($facts);
+        foreach (self::NAME_PARTS as $gedcom_tag => $field) {
+            $value          = trim($fact->attribute($gedcom_tag));
+            $parts[$field]  = $value === '' ? null : $value;
         }
 
-        return Fact::sortFacts($facts);
+        return $parts;
     }
 
     /**

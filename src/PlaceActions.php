@@ -10,7 +10,6 @@ use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\GedcomRecord;
-use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Location;
 use Fisharebest\Webtrees\Note;
@@ -138,7 +137,7 @@ trait PlaceActions
         $lists    = $this->placeRecordsJson($here['facts']);
         $levels   = explode(', ', $here['name']);
 
-        $comparator = I18N::comparator();
+        $comparator = Compat::comparator();
         usort($children, static fn (array $a, array $b): int => $comparator($a['name'], $b['name']));
 
         return response([
@@ -249,7 +248,7 @@ trait PlaceActions
      */
     private function placeRecordsJson(array $facts_by_record): array
     {
-        $comparator  = I18N::comparator();
+        $comparator  = Compat::comparator();
         $individuals = [];
         $families    = [];
         foreach ($facts_by_record as $facts) {
@@ -277,6 +276,7 @@ trait PlaceActions
                 'sex'      => $this->sexCode($e['record']),
                 'private'  => false,
                 'lifespan' => $this->plain($e['record']->lifespan()),
+                'lifespanGedcom' => $this->lifespanGedcom($e['record']),
                 'url'      => $e['record']->url(),
                 'facts'    => $events($e['facts']),
             ], array_slice($individuals, 0, self::LINKED_RECORDS_LIMIT)),
@@ -1012,7 +1012,7 @@ trait PlaceActions
             ];
         }
 
-        $comparator = I18N::comparator();
+        $comparator = Compat::comparator();
         usort($places, static fn (array $a, array $b): int => $comparator($a['name'], $b['name']));
 
         return response(['total' => count($places), 'places' => $places]);

@@ -9,6 +9,7 @@ use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Elements\CustomElement;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Http\Exceptions\HttpException;
 use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Module\AbstractModule;
@@ -37,6 +38,7 @@ use function is_file;
 use function is_string;
 use function json_decode;
 use function preg_match;
+use function preg_quote;
 use function response;
 use function str_contains;
 use function str_starts_with;
@@ -59,6 +61,7 @@ use function strtolower;
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
  *   src/MergeActions.php  Personen zusammenfuehren mit Vorschau, Protokoll und Rueckgaengig
  *   src/TaskActions.php   Forschungsaufgaben, Reihenfolge, Aenderungsverlauf (Stufe 30)
+ *   src/MessageActions.php Nachrichten: Posteingang, Senden, Loeschen ueber webtrees' Nachrichtensystem (Stufe 42)
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
 class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
@@ -74,6 +77,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use MergeActions;
     use TaskActions;
     use OpenInApp;
+    use MessageActions;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
@@ -81,7 +85,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // unter diesem Namen liegen bei Bestandsinstallationen noch die Einstellungen (siehe boot()).
     public const string OLD_MODULE_NAME = '_webtreesand-api_';
     // Was welche Stufe gebracht hat, steht in docs/API.md (Spalte "since") und in CHANGELOG.md.
-    public const int    API_VERSION = 42;
+    public const int    API_VERSION = 46;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -114,6 +118,11 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // Moduleinstellung: Apps aus src/Apps.php, die der Verwalter abgeschaltet hat (Kennungen mit Komma). Leer = alle an.
     private const string APPS_OFF_SETTING   = 'apps_off';
 
+    // Moduleinstellung: wer den Hinweis oben auf der Seite und den Fusszeilen-Link zur Seite "App" sieht (Issue #26).
+    // Leer = alle angemeldeten Benutzer, sonst die Mindestrolle im Baum oder "none".
+    private const string HINT_ROLE_SETTING  = 'hint_role';
+    private const array  HINT_ROLES         = ['', 'editor', 'moderator', 'manager', 'admin', 'none'];
+
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int PLACES_LIMIT        = 20;
@@ -141,6 +150,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int ACCEPT_ALL_LIMIT = 10000;
     // Bilder: Vorschau in Listen (quadratisch zugeschnitten) und in der Medienansicht (eingepasst), Kantenlaenge in Pixeln
     private const int THUMB_SIZE   = 200;
+    // Fehlercodes, wenn webtrees selbst eine Anfrage an das Modul abweist (HttpException) - sonst "http-error"
+    private const array HTTP_ERROR_CODES = [400 => 'bad-request', 403 => 'forbidden', 404 => 'not-found', 405 => 'method-not-allowed'];
     private const int PREVIEW_SIZE = 400;
     // Art eines Mediums (OBJE:FILE:FORM:TYPE), wie webtrees sie zur Auswahl stellt
     private const array MEDIA_TYPES = ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'electronic', 'film', 'fiche', 'magazine', 'manuscript', 'painting', 'other'];
@@ -248,7 +259,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.23.0';
+        return '1.29.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -319,7 +330,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         $offer = $this->openOffer($request);
         $open  = $offer === null ? '' : view($this->name() . '::open-in-app', $offer);
 
-        if (!Auth::check()) {
+        // Hinweis und Fusszeilen-Link nur fuer die gewaehlte Rolle (#26); das Angebot oben gilt fuer alle.
+        if (!Auth::check() || !$this->hintVisible($tree)) {
             return $open;
         }
 
@@ -340,6 +352,36 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
             'pc_app'    => Apps::matching($apps, $device, 'pc')[0] ?? Apps::kind($apps, 'pc')[0] ?? null,
             'phone_app' => Apps::matching($apps, $device, 'phone')[0] ?? Apps::kind($apps, 'phone')[0] ?? null,
         ]);
+    }
+
+    /**
+     * Sieht der angemeldete Benutzer Hinweis und Fusszeilen-Link? Nur Anzeige - die Seite "App" und die Schnittstelle
+     * bleiben fuer alle erreichbar, die Rechte regelt webtrees.
+     */
+    private function hintVisible(Tree $tree): bool
+    {
+        return match ($this->getPreference(self::HINT_ROLE_SETTING)) {
+            ''          => true,
+            'editor'    => Auth::isEditor($tree),
+            'moderator' => Auth::isModerator($tree),
+            'manager'   => Auth::isManager($tree),
+            'admin'     => Auth::isAdmin(),
+            default     => false,
+        };
+    }
+
+    /**
+     * Nennt die Adresse einen Stammbaum, z. B. .../module/_api4webtrees_/Individuals/<tree>?
+     */
+    private function routeNamesTree(ServerRequestInterface $request): bool
+    {
+        $route = Validator::queryParams($request)->string('route', '');
+
+        if ($route === '') {
+            $route = $request->getUri()->getPath();
+        }
+
+        return preg_match('#/module/' . preg_quote($this->name(), '#') . '/[^/]+/[^/]+#', $route) === 1;
     }
 
     /**
@@ -388,7 +430,24 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
             }
         }
 
-        return $handler->handle($request);
+        try {
+            return $handler->handle($request);
+        } catch (HttpException $e) {
+            if ($request->getAttribute('module') !== $this->name()) {
+                throw $e;
+            }
+
+            // webtrees weist die Anfrage ab, bevor das Modul sie sieht - als JSON wie alle anderen Fehler des Moduls,
+            // nicht als HTML-Seite (die ab 2.3 einen Anmelde-Link samt Anfrage-URL enthaelt).
+            // Haeufigster Fall: Der Baum in der Adresse ist unbekannt oder fuer diesen Benutzer unsichtbar - webtrees setzt
+            // "tree" dann auf null und der Validator meldet 400. Beides als not-found: ein Gast erfaehrt so nicht, ob es
+            // einen privaten Baum gibt.
+            if ($request->getAttribute('tree') === null && $this->routeNamesTree($request)) {
+                return $this->error(404, 'not-found');
+            }
+
+            return $this->error($e->getCode(), self::HTTP_ERROR_CODES[$e->getCode()] ?? 'http-error');
+        }
     }
 
     /**
@@ -396,7 +455,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
      */
     private function matchLanguage(string $wanted): string|null
     {
-        $tags    = array_map(static fn ($locale): string => $locale->languageTag(), I18N::activeLocales());
+        $tags    = Compat::activeLanguageTags();
         $wanted  = strtolower($wanted);
         $primary = explode('-', $wanted)[0];
 

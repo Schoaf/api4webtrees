@@ -8,35 +8,43 @@
 
 <p align="center">
   <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-Modul%20ZIP-1F5F99?style=for-the-badge" alt="webtrees-Modul api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Windows-wtWin%20.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows: wtWin (.exe)"></a>
   <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
   <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
 </p>
 
-Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **[wtAnd](https://github.com/thobgg/app4webtrees)** eine
-JSON-Schnittstelle zum Lesen **und** Schreiben gibt. Es ist ein gewöhnliches Zusatzmodul: Es liegt
+Ein Modul für [webtrees](https://webtrees.net/), das den Apps **[wtAnd, wtWin und wtTux](https://github.com/thobgg/app4webtrees)**
+(Android, Windows, Linux) eine JSON-Schnittstelle zum Lesen **und** Schreiben gibt. Es ist ein gewöhnliches Zusatzmodul: Es liegt
 in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 
-**Wozu:** Wer den Stammbaum am PC in webtrees pflegt, arbeitet weiter wie bisher. Die übrige Familie, die bisher nur
-eine am Handy mühsam bedienbare Webseite hatte, bekommt den Stammbaum mit der App auf Handy und Tablet: Baum,
-Verwandtschaft, Jahrestage und Fotos. Änderungen aus der App, etwa ein Foto vom Grabstein oder ein korrigiertes Datum,
-landen als ausstehende Änderung in derselben webtrees-Installation.
+**Wozu:** Wer den Stammbaum pflegt, arbeitet weiter in webtrees wie bisher – oder in wtWin, einem klassischen
+Genealogie-Programm auf denselben Daten. Die übrige Familie, die bisher nur eine am Handy mühsam bedienbare Webseite
+hatte, bekommt den Stammbaum mit wtAnd auf Handy und Tablet: Baum, Verwandtschaft, Jahrestage und Fotos. Änderungen
+aus einer App, etwa ein Foto vom Grabstein oder ein korrigiertes Datum, landen als ausstehende Änderung in derselben
+webtrees-Installation.
 
 | | |
 | - | - |
-| webtrees | 2.2.x (mit 2.2.6 getestet); für 2.3 vorbereitet |
+| webtrees | 2.2.x (mit 2.2.6 getestet); läuft auch mit dem Entwicklungsstand von 2.3 (main vom 04.11.2026) – 2.3 kann sich noch ändern |
 | PHP | 8.3 oder neuer (wie von webtrees 2.2 verlangt) |
 | Zugriff | lesen und schreiben, immer mit den Rechten des angemeldeten webtrees-Benutzers |
 | Lizenz | GPL-3.0 |
 
-## Die App: wtAnd
+## Die Apps: wtAnd, wtWin und wtTux
 
-Das Modul ist die Server-Seite von **[wtAnd](https://github.com/thobgg/app4webtrees)**, einer nativen Android-App
-(Kotlin, kein WebView) für Handy und Tablet. [APK herunterladen](https://github.com/thobgg/app4webtrees/releases/latest)
-(signiert). Außerhalb des Play Store fragt Android einmalig, ob der Browser Apps installieren darf.
+Das Modul ist die Server-Seite der Apps in **[app4webtrees](https://github.com/thobgg/app4webtrees)**: **wtAnd**, eine
+native Android-App (Kotlin, kein WebView) für Handy und Tablet, und **wtWin** und **wtTux**, dasselbe Programm für
+Windows und Linux (wtMac als Testfassung). [Downloads](https://github.com/thobgg/app4webtrees/releases/latest): APK,
+Windows-Installer, Linux-`.deb`, alle signiert. Außerhalb des Play Store fragt Android einmalig, ob der Browser Apps
+installieren darf.
 
-| Tablet: Baum und Profil nebeneinander | Handy: das Profil als Zeitleiste |
+| Handy: der Baum | Das Profil als Zeitleiste | Wo die Person gelebt hat |
+| - | - | - |
+| <img src="docs/app-handy-baum.png" alt="Baum am Handy" width="260"> | <img src="docs/app-handy.png" alt="Profil als Zeitleiste" width="260"> | <img src="docs/app-handy-karte.png" alt="Karte der Lebensstationen" width="260"> |
+
+| PC: wtWin und wtTux | Tablet: Baum und Profil nebeneinander |
 | - | - |
-| ![Baum und Profil nebeneinander](docs/app-tablet.png) | ![Profil am Handy](docs/app-handy.png) |
+| <img src="docs/app-pc.png" alt="wtWin: Navigator mit vier Generationen" width="560"> | <img src="docs/app-tablet.png" alt="Baum und Profil nebeneinander" width="400"> |
 
 - **Baum als Mittelpunkt:** Sanduhr-Ansicht mit Ahnen, Partnern, Kindern und Enkeln, auf Wunsch mit Geschwistern;
   frei verschieben und zoomen, Zweige nach oben aufklappen, jede Person zur Mittelperson machen.
@@ -45,6 +53,9 @@ Das Modul ist die Server-Seite von **[wtAnd](https://github.com/thobgg/app4webtr
 - **Bearbeiten:** Ereignisse anlegen, ändern, löschen, Verwandte über das „+“ an jeder Karte anlegen, Fotos aufnehmen
   oder auswählen und einer Person zuordnen; sie werden passend zum Upload-Limit des Servers verkleinert.
 - **Jahrestage** der nächsten Tage, auf Wunsch mit täglicher Erinnerung; Moderatoren nehmen ausstehende Änderungen in der App an oder verwerfen sie.
+- **Am PC:** wtWin und wtTux arbeiten wie ein klassisches Genealogie-Programm auf demselben Stammbaum – Navigator und
+  Personenblatt, Listen, Tafeln und Drucken, Bücher für die Familie (Familienbuch, Ortsfamilienbuch), Werkzeuge wie
+  der Datumsrechner, und die GEDCOM-L-Angaben, die deutsche Programme erwarten.
 - **Verbinden mit einem Tipp:** Die Seite „App“ in webtrees übergibt Server, Baum und einen Einmal-Code an die App.
 
 Deutsch und Englisch; die Beschriftungen des Servers kommen in der Sprache der App. Was noch nicht nativ geht, öffnet
@@ -78,6 +89,11 @@ Abgehakte verschwinden von der Seite „App“, aus dem Hinweis und der Fußzeil
 werden, wenn sie von außen geöffnet werden. Abgehakte bleiben immer im Browser. Standard: alle an. Siehe
 [Links in der App öffnen](#links-in-der-app-öffnen).
 
+**Hinweis und Fußzeilen-Link:** *Hinweis und Fußzeilen-Link zeigen für* legt fest, wer den Hinweis (siehe unten) und den
+Link zur Seite „App“ in der Fußzeile sieht: alle angemeldeten Benutzer (Standard), eine Mindestrolle im Stammbaum
+(Bearbeiter, Moderatoren, Verwalter), nur Administratoren oder niemand. Das ändert nur die Anzeige – die Seite „App“
+bleibt erreichbar (die Einstellungen verlinken sie je Stammbaum), wer die Apps nutzen darf, regeln die Rechte in webtrees.
+
 ![Einstellungsseite: App installieren, Stammbäume für die App, Apps, Status](docs/einstellungen.png)
 
 ## Für Benutzer: die Seite „App“
@@ -89,6 +105,8 @@ mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite ze
 zuerst (eigene vor fremden); nur diese App ist aufgeklappt, die übrigen stehen als je eine Zeile eingeklappt darunter, die Seite bleibt kurz. Auf iPhone und iPad
 zeigt sie webtrees mobile von Andreas Scharf (App Store); ein Gerät ohne passende App (keine dafür, oder in den Einstellungen
 abgeschaltet) bekommt einen Hinweis auf den Browser. Je App zwei Schritte:
+
+![Die Seite „App“ am Linux-PC: wtTux aufgeklappt mit Herunterladen und Verbinden, die anderen Apps eingeklappt darunter](docs/app-seite.png)
 
 1. **Installieren:** ein Knopf zur neuesten Datei (`.exe`, `.deb` oder APK), fürs Handy auch als QR-Code.
 2. **Mit dem eigenen Konto verbinden – nichts eintippen, das Passwort erreicht das Gerät nie:**
@@ -170,10 +188,16 @@ von Medienobjekten, Startperson festlegen.
 bleiben ab jetzt selten; Änderungen und Fehlerbehebungen werden gesammelt, Pull Requests ohne sofortiges Release gemergt.
 
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
-(`apiVersion` in `Info`, heute 30); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+(`apiVersion` in `Info`, heute 43); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
 für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
 neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
 verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.
+
+Die Schnittstelle ist auch unabhängig davon, welche GEDCOM-Fassung der Server speichert: Daten, Tags und Verweise kommen
+in derselben Form, ob der Baum GEDCOM 5.5.1 (webtrees 2.2/2.3) oder GEDCOM 7.0 ist. Der Beweis ist die 2.x-Linie
+[api4webtrees-gedcom7-lab](https://github.com/thobgg/api4webtrees-gedcom7-lab) für
+[webtrees-gedcom7-lab](https://github.com/thobgg/webtrees-gedcom7-lab), einen Versuch, webtrees GEDCOM 7.0 nativ speichern
+zu lassen: dieselben Routen, dieselben Felder, gemeinsame API-Stufen, und wtAnd läuft gegen beide ohne Änderung.
 
 **Apps auf der Seite „App“:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen, nichts an den
 JSON-Endpunkten, Rechten oder dem Datenschutz ist an eine App gebunden. Die Seiten „App“ und „Verbinden“, der Hinweis

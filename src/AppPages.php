@@ -97,6 +97,7 @@ trait AppPages
             'download_qr'  => $this->qrSvg($download),
             'apps'         => $apps,
             'icons'        => $this->iconUrls($apps),
+            'hint_role'    => $this->getPreference(self::HINT_ROLE_SETTING),
             'device_names' => self::deviceNames(),
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
@@ -140,6 +141,9 @@ trait AppPages
             $areas_on = Validator::parsedBody($request)->array('open_areas');
             $this->setPreference(self::OPEN_AREAS_OFF_SETTING, implode(',', array_diff(Apps::AREAS, $areas_on)));
         }
+        // Wer Hinweis und Fusszeilen-Link sieht; Unbekanntes faellt auf "alle" zurueck.
+        $role = Validator::parsedBody($request)->string('hint_role', '');
+        $this->setPreference(self::HINT_ROLE_SETTING, in_array($role, self::HINT_ROLES, true) ? $role : '');
 
         FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
 

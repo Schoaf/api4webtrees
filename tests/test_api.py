@@ -81,6 +81,7 @@ def leseaufrufe(baum="testbaum"):
         ("Places", baum, {"list": 1}),
         ("Merges", baum, {}),
         ("Tasks", baum, {}),
+        ("Messages", baum, {}),
         ("Tasks", baum, {"open": 1}),
         ("Changes", baum, {"limit": 20}),
         ("Changes", baum, {"xref": "I1"}),
@@ -522,6 +523,16 @@ class Spitznamen(unittest.TestCase):
         treffer = g.get("Individuals", "testbaum", q="Bakker").json["data"]
         self.assertEqual(['Pieter "Piet" Bakker'], [p["name"] for p in treffer])
 
+    def test_suche_nach_spitzname(self):
+        """Suche findet den Spitznamen auch, wenn er nur als 2 NICK unter dem Namen steht (App-Issue #24)."""
+        g = U.sitzung()
+        namen = lambda q: [p["name"] for p in g.get("Individuals", "testbaum", q=q).json["data"]]
+        self.assertEqual(['Pieter "Piet" Bakker'], namen("Piet"), "nur als NICK")
+        self.assertEqual(['… "Klaas" Smit'], namen("Klaas"), "NICK ohne Vornamen")
+        self.assertEqual(['Pieter "Piet" Bakker'], namen("Piet Bakker"), "Spitzname und Familienname gemischt")
+        self.assertEqual(['Johannes "Jan" de Vries'], namen("Jan"), "Spitzname im Namen selbst")
+        self.assertEqual([], namen("Pieter Klaas"), "Woerter zweier Personen treffen nicht")
+
 class StufeDreissig(unittest.TestCase):
     """Stufe 30: Merkliste in den Favoriten, Forschungsaufgaben (_TODO), Reihenfolge, Aenderungsverlauf."""
 
@@ -754,6 +765,9 @@ class GedcomL(unittest.TestCase):
         self.assertEqual((2026, 2026), (aufgabe["completed"]["year"], aufgabe["reminder"]["year"]))
         fam = s.get("Family", "gedcoml", xref="F1").json
         self.assertEqual(["AAAABBBBCCCCDDDDEEEEFFFF00001111"], fam["uids"])
+        # Notiz der Quelle als Verweis auf einen Notiz-Datensatz (1 NOTE @N1@): der Text der Notiz, nicht der Zeiger
+        # (bis 1.26.0 fehlte in ReadActions der Import von Note)
+        self.assertEqual(["Hofgeschichte"], s.get("Source", "gedcoml", xref="S1").json["notes"])
         # _STAT kommt als Fakt mit uebersetztem Wert (wie webtrees ihn zeigt)
         self.assertNotEqual("", next(f for f in fam["facts"] if f["tag"] == "_STAT")["value"])
         self.assertEqual(("6", None), (fam["tasks"][0]["priority"], fam["tasks"][0]["description"]))
@@ -1469,7 +1483,7 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
 
     def test_sprache_des_kontos_in_info(self):
-        """Stufe n: Info.user.language ist die unter "Mein Konto" gewaehlte Sprache - leer fuer Gaeste."""
+        """Stufe 41: Info.user.language ist die unter "Mein Konto" gewaehlte Sprache - leer fuer Gaeste."""
         self.assertEqual("", U.sitzung().info()["user"]["language"])
         user_id = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = 'mitglied'")[0][0]
         try:
@@ -1528,8 +1542,190 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(1, len(treffer), a)
         self.assertEqual((0, 100, "BIRT"), (treffer[0]["inDays"], treffer[0]["years"], treffer[0]["tag"]))
         self.assertEqual(neu.json["xref"], treffer[0]["person"]["xref"])
+        self.assertEqual("gregorian", treffer[0]["date"]["calendar"])
         self.assertIn("more", a.json)
         self.assertLessEqual(len(a.json["data"]), a.json["total"])
+
+    def test_jahrestag_anderer_kalender(self):
+        """Stufe 43: date.calendar nennt den Kalender, Jahrestage bringen das GEDCOM-Datum (Issue #43)."""
+        # Heutiger Tag im julianischen Kalender: gregorianisch minus 13 Tage (gilt 1900-2100)
+        jul = datetime.date.today() - datetime.timedelta(days=13)
+        datum = f"@#DJULIAN@ {jul.day} {'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split()[jul.month - 1]} 1850"
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Kalender", "surname": "Julian", "sex": "M", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        f = s.post("Fact", "testbaum", {"tag": "BIRT", "date": datum}, xref=neu.json["xref"])
+        self.assertEqual(True, f.json["ok"], f)
+        a = U.sitzung().get("Anniversaries", "testbaum", days=1)
+        treffer = [e for e in a.json["data"] if e["xref"] == neu.json["xref"]]
+        self.assertEqual(1, len(treffer), a)
+        self.assertEqual("julian", treffer[0]["date"]["calendar"])
+        self.assertEqual(datum, treffer[0]["date"]["gedcom"])
+
+    def test_ungenaue_daten_und_unterzeilen(self):
+        """Stufe 44: Zusaetze und Freitext bleiben beim Schreiben wie eingegeben, 3 TIME bleibt beim Aendern des Datums,
+        lifespanGedcom nennt die Daten hinter lifespan (app4webtrees#44)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Ungenau", "surname": "Datumsprobe", "sex": "M", "dead": True,
+                                                    "birthDate": "abt 1865", "deathDate": "bet 1915 and 1918 (laut Grabstein)"})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+
+        def gedcom():
+            return umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+
+        def fakt(tag):
+            return next(f for f in self.fakten(s, p) if f["tag"] == tag)
+
+        # Anlegen: Schluesselwoerter gross, Text in Klammern wie eingegeben
+        self.assertIn("\n1 BIRT\n2 DATE ABT 1865", gedcom())
+        self.assertIn("\n1 DEAT\n2 DATE BET 1915 AND 1918 (laut Grabstein)", gedcom())
+
+        # lifespanGedcom in der Person, in birth/death und in Listen (personShort)
+        person = s.get("Individual", "testbaum", xref=p).json["person"]
+        self.assertEqual({"birth": "ABT 1865", "death": "BET 1915 AND 1918 (laut Grabstein)"}, person["lifespanGedcom"])
+        self.assertEqual(("ABT 1865", "BET 1915 AND 1918 (laut Grabstein)"), (person["birth"]["date"]["gedcom"], person["death"]["date"]["gedcom"]))
+        liste = s.get("Individuals", "testbaum", q="Datumsprobe").json["data"]
+        self.assertEqual({"birth": "ABT 1865", "death": "BET 1915 AND 1918 (laut Grabstein)"}, next(x for x in liste if x["xref"] == p)["lifespanGedcom"])
+
+        # Jeder Zusatz einmal ueber die Route Fact schreiben und wieder lesen
+        for eingabe, soll in [("est 1865", "EST 1865"), ("cal 1865", "CAL 1865"), ("bef 1865", "BEF 1865"), ("aft 1865", "AFT 1865"),
+                              ("bet 1860 and 1865", "BET 1860 AND 1865"), ("from 1860 to 1865", "FROM 1860 TO 1865"),
+                              ("int 1865 (kurz nach Neujahr)", "INT 1865 (kurz nach Neujahr)"),
+                              ("@#djulian@ 1 jan 1865", "@#DJULIAN@ 1 JAN 1865"), ("abt 1865", "ABT 1865"),
+                              ("(um die Jahrhundertwende)", "(um die Jahrhundertwende)")]:
+            a = s.post("Fact", "testbaum", {"factId": fakt("BIRT")["id"], "date": eingabe}, xref=p)
+            self.assertEqual(True, a.json["ok"], (eingabe, a))
+            self.assertEqual(soll, fakt("BIRT")["date"]["gedcom"], eingabe)
+            if eingabe.startswith("@#"):
+                self.assertEqual("julian", fakt("BIRT")["date"]["calendar"])
+
+        # Nur Text in Klammern: lesbar mit year 0 und jd 0; lifespan kennt kein Geburtsjahr mehr, lifespanGedcom auch nicht
+        self.assertEqual(("um die Jahrhundertwende", 0, 0), tuple(fakt("BIRT")["date"][k] for k in ("text", "year", "jd")))
+        self.assertIsNone(s.get("Individual", "testbaum", xref=p).json["person"]["lifespanGedcom"]["birth"])
+        self.assertEqual("invalid-date", s.post("Fact", "testbaum", {"factId": fakt("BIRT")["id"], "date": "irgendwann"}, xref=p).json["error"])
+
+        # 3 TIME unter dem Datum bleibt, wenn sich das Datum aendert; ohne Datum geht sie mit
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "gedcom": "1 DEAT\n2 DATE 3 MAR 1916\n3 TIME 10:30\n2 PLAC Offenbach"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "date": "abt 4 mar 1916"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn("\n1 DEAT\n2 DATE ABT 4 MAR 1916\n3 TIME 10:30\n2 PLAC Offenbach", gedcom())
+        a = s.post("Fact", "testbaum", {"factId": fakt("DEAT")["id"], "date": ""}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn("\n1 DEAT\n2 PLAC Offenbach\n1 ", gedcom())  # Datum samt 3 TIME weg (1 CHAN hat eine eigene TIME)
+
+        # Fundstelle: Datum der Fundstelle ebenso (2 DATA / 3 DATE)
+        a = s.post("Citation", "testbaum", {"factId": fakt("DEAT")["id"], "source": "S1", "date": "int 1916 (laut Pfarrer)"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual("INT 1916 (laut Pfarrer)", fakt("DEAT")["sources"][0]["date"]["gedcom"])
+
+    def test_name_schreiben_vorsatz_spitzname_rufname(self):
+        """Name ueber value aendern: SURN ohne Vorsatz (SPFX), Spitzname aus der Anzeige nach NICK statt in GIVN,
+        _RUFNAME bleibt, auch wenn er nicht mehr woertlich unter den Vornamen steht (gemeldet aus app4webtrees)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Johanna", "surname": "Vorsatzprobe", "sex": "F", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+
+        def name():
+            return next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+
+        def name_gedcom():
+            g = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", p)[0][0]
+            return re.search(r"\n1 NAME .*?(?=\n1 |$)", g, re.S).group(0)
+
+        a = s.post("Fact", "testbaum", {"factId": name()["id"], "gedcom": "1 NAME Johanna Maria /von Berg/\n2 GIVN Johanna Maria\n2 SPFX von\n"
+                                        "2 SURN Berg\n2 NICK Hanne\n2 _RUFNAME Maria"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        # So zeigt das Modul den Namen - eine App schickt ihn so zurueck
+        angezeigt = s.get("Individual", "testbaum", xref=p).json["person"]["name"]
+        self.assertIn('"Hanne"', angezeigt)
+
+        # 1. Vorsatz und Spitzname: unveraendert zurueckgeschickt bleibt alles, wie es war
+        a = s.post("Fact", "testbaum", {"factId": name()["id"], "value": 'Johanna "Hanne" Maria /von Berg/'}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        g = name_gedcom()
+        self.assertTrue(g.startswith("\n1 NAME Johanna Maria /von Berg/\n"), g)
+        for zeile in ("2 GIVN Johanna Maria", "2 SPFX von", "2 SURN Berg", "2 NICK Hanne", "2 _RUFNAME Maria"):
+            self.assertIn("\n" + zeile, g)
+        self.assertNotIn("SURN von Berg", g)
+
+        # 2. Spitzname in der Anzeige geaendert: NICK folgt, der Name bleibt ohne Anfuehrungszeichen
+        s.post("Fact", "testbaum", {"factId": name()["id"], "value": 'Johanna "Hannchen" Maria /von Berg/'}, xref=p)
+        g = name_gedcom()
+        self.assertIn("\n2 NICK Hannchen", g)
+        self.assertNotIn('"', g)
+
+        # 3. Rufname nicht mehr woertlich unter den Vornamen: _RUFNAME bleibt (Schreibweise korrigiert, nichts verlieren)
+        s.post("Fact", "testbaum", {"factId": name()["id"], "value": "Johanna /von Berg/"}, xref=p)
+        g = name_gedcom()
+        self.assertIn("\n2 GIVN Johanna\n", g)
+        self.assertIn("\n2 _RUFNAME Maria", g)
+
+    def test_namensteile_jedes_namens(self):
+        """Stufe 45: nameParts an jedem NAME-Fakt, auch am Ehenamen (Issue #27)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Johanna", "surname": "Teilprobe", "sex": "F", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+        name = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+        a = s.post("Fact", "testbaum", {"factId": name["id"], "gedcom": "1 NAME Dr. Johanna /von Teilprobe/ jr.\n2 TYPE birth\n2 NPFX Dr.\n"
+                                        "2 GIVN Johanna\n2 NICK Hanne\n2 SPFX von\n2 SURN Teilprobe\n2 NSFX jr.\n2 _RUFNAME Johanna"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        a = s.post("Fact", "testbaum", {"gedcom": "1 NAME Johanna /Ehemann/\n2 TYPE married\n2 GIVN Johanna\n2 SURN Ehemann"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        namen = [f for f in self.fakten(s, p) if f["tag"] == "NAME"]
+        self.assertEqual([
+            {"prefix": "Dr.", "given": "Johanna", "nickname": "Hanne", "surnamePrefix": "von", "surname": "Teilprobe", "suffix": "jr.", "callName": "Johanna"},
+            {"prefix": None, "given": "Johanna", "nickname": None, "surnamePrefix": None, "surname": "Ehemann", "suffix": None, "callName": None},
+        ], [n["nameParts"] for n in namen])
+        self.assertEqual(["birth", "married"], [n["type"].lower() for n in namen])
+        # andere Fakten: null; die Teile stehen nicht doppelt in details
+        self.assertIsNone(next(f for f in self.fakten(s, p) if f["tag"] == "SEX")["nameParts"])
+        self.assertEqual([], [d for n in namen for d in n["details"] if d["tag"] in ("NPFX", "GIVN", "NICK", "SPFX", "SURN", "NSFX", "_RUFNAME")])
+
+    def test_namensteile_schreiben(self):
+        """Stufe 46: nameParts beim Aendern eines NAME-Fakts - gesendet wird gesetzt, leer entfernt, nicht gesendet bleibt (Issue #28)."""
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Hans", "surname": "Muster", "sex": "M", "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        p = neu.json["xref"]
+        name = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+        a = s.post("Fact", "testbaum", {"factId": name["id"], "gedcom": "1 NAME Hans /Muster/\n2 GIVN Hans Peter Josef\n2 SURN Muster\n2 NICK Hansi"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+
+        def teile():
+            n = next(f for f in self.fakten(s, p) if f["tag"] == "NAME")
+            return n["id"], n["value"], n["nameParts"]
+
+        fid, _, _ = teile()
+        # nur Familienname aendern: GIVN bleibt, auch wenn er vom Anzeigenamen abweicht
+        a = s.post("Fact", "testbaum", {"factId": fid, "value": "Hans /Beispiel/", "nameParts": {"surname": "Beispiel"}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        fid, wert, t = teile()
+        self.assertEqual("Hans /Beispiel/", wert)
+        self.assertEqual(("Hans Peter Josef", "Beispiel", "Hansi"), (t["given"], t["surname"], t["nickname"]))
+        # Teile setzen, entfernen (null und leer), andere bleiben
+        a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": {"prefix": "Dr.", "nickname": None, "suffix": "jr.", "callName": "Hans"}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        fid, wert, t = teile()
+        self.assertEqual("Hans /Beispiel/", wert)
+        self.assertEqual({"prefix": "Dr.", "given": "Hans Peter Josef", "nickname": None, "surnamePrefix": None, "surname": "Beispiel",
+                          "suffix": "jr.", "callName": "Hans"}, t)
+        a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": {"suffix": "", "prefix": None}}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual((None, None, "Hans Peter Josef"), (teile()[2]["prefix"], teile()[2]["suffix"], teile()[2]["given"]))
+        # ohne nameParts wie bisher: GIVN aus dem Wert
+        fid = teile()[0]
+        a = s.post("Fact", "testbaum", {"factId": fid, "value": "Hans /Neu/"}, xref=p)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual(("Hans", "Neu"), (teile()[2]["given"], teile()[2]["surname"]))
+        # ungueltig
+        fid = teile()[0]
+        for kaputt, code in (({"gibbet": "x"}, "invalid-name"), ({"given": 5}, "invalid-name"), (["Hans"], "invalid-name"), ({"given": "@I1@"}, "invalid-value")):
+            a = s.post("Fact", "testbaum", {"factId": fid, "nameParts": kaputt}, xref=p)
+            self.assertEqual(code, a.json.get("error"), (kaputt, a))
 
     def test_app_liste_gueltig(self):
         """src/Apps.php: jeder Eintrag vollstaendig, https, Schema eindeutig - die Pruefung, die ein Pull Request bestehen muss."""
@@ -1557,6 +1753,9 @@ class Schreiben(unittest.TestCase):
         self.assertIn("webtreesand://connect?", android)
         self.assertIn("github.com/thobgg/api4webtrees", android)
         self.assertNotIn("noch kein eigenes Programm", android)
+        # Pro Geraet ist eine App offen (Apps.php: open): wtAnd aufgeklappt, webtrees mobile als Zeile darunter
+        self.assertNotIn("wtAnd</summary>", android)
+        self.assertIn("webtrees mobile</summary>", android)
 
         windows = seite("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         self.assertLess(windows.index("wtWin"), windows.index("wtAnd"))
@@ -1570,6 +1769,8 @@ class Schreiben(unittest.TestCase):
         self.assertLess(iphone.index("webtrees mobile"), iphone.index("wtAnd"))
         # Die fremde App hat kein Logo und nicht den Satz des Modulautors - der steht erst bei wtAnd darunter
         self.assertLess(iphone.index("webtrees mobile"), iphone.index("gemeinsam entwickelt"))
+        self.assertNotIn("webtrees mobile</summary>", iphone)
+        self.assertIn("wtAnd</summary>", iphone)
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)
@@ -1593,8 +1794,9 @@ class Schreiben(unittest.TestCase):
         self.assertIn("wttux", alle)
         csrf = re.search(r'name="_csrf" value="([^"]+)"', formular).group(1)
 
-        def speichern(apps):
-            daten = urllib.parse.urlencode([("_csrf", csrf), ("trees[]", "testbaum"), ("trees[]", "geheim")] + [("apps[]", a) for a in apps]).encode()
+        def speichern(apps, rolle=""):
+            daten = urllib.parse.urlencode([("_csrf", csrf), ("trees[]", "testbaum"), ("trees[]", "geheim"), ("hint_role", rolle)]
+                                           + [("apps[]", a) for a in apps]).encode()
             req = urllib.request.Request(admin_url, data=daten, method="POST")
             req.add_header("Content-Type", "application/x-www-form-urlencoded")
             return s._senden(req)
@@ -1615,6 +1817,37 @@ class Schreiben(unittest.TestCase):
 
         seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
         self.assertIn("wtTux", seite)
+
+        # Issue #26: wer Hinweis und Fusszeilen-Link sieht, waehlt der Verwalter nach Rolle; Vorgabe alle.
+        self.assertIn('<option value="" selected>', formular)
+
+        def hinweis_frei(name):
+            uid = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = ?", name)[0][0]
+            umgebung.sql("DELETE FROM wt_user_setting WHERE user_id = ? AND setting_name = 'webtreesand_hint'", uid)
+
+        def baumseite(sitzung):
+            return sitzung._senden(urllib.request.Request(sitzung.url("/tree/testbaum"))).text
+
+        m = U.sitzung("mitglied")
+        for name in ("admin", "mitglied"):
+            hinweis_frei(name)
+        self.assertIn("wt-webtreesand-hint", baumseite(m))
+        self.assertIn("wt-footer-webtreesand", baumseite(m))
+        try:
+            speichern(alle, rolle="manager")
+            self.assertNotIn("wt-webtreesand-hint", baumseite(m))
+            self.assertNotIn("wt-footer-webtreesand", baumseite(m))
+            self.assertIn("wt-webtreesand-hint", baumseite(s))
+            self.assertIn('<option value="manager" selected>', s._senden(urllib.request.Request(admin_url)).text)
+            # Die Seite "App" bleibt erreichbar
+            self.assertIn("wtAnd", m._senden(urllib.request.Request(m.url("/module/_api4webtrees_/App/testbaum"))).text)
+            speichern(alle, rolle="none")
+            self.assertNotIn("wt-footer-webtreesand", baumseite(s))
+            speichern(alle, rolle="unsinn")
+            self.assertIn("wt-footer-webtreesand", baumseite(m))
+        finally:
+            speichern(alle)
+        self.assertIn("wt-webtreesand-hint", baumseite(m))
 
     def test_links_in_der_app_oeffnen(self):
         """Eine Seite, die eine App zeigen kann, von aussen geoeffnet: die Fusszeile bietet die App an (#22)."""
@@ -1715,6 +1948,85 @@ class Schreiben(unittest.TestCase):
         a = s.post("Pair", None, {"code": "0" * 48})
         self.assertEqual(False, a.json["ok"], a)
         self.assertFalse(s.info()["user"]["loggedIn"])
+
+
+class Nachrichten(unittest.TestCase):
+    """Stufe 42: Posteingang, Senden und Loeschen ueber webtrees' eigenes Nachrichtensystem (Tabelle message, MessageService)."""
+
+    @staticmethod
+    def kontakt(name, art):
+        uid = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = ?", name)[0][0]
+        umgebung.sql("DELETE FROM wt_user_setting WHERE user_id = ? AND setting_name = 'contactmethod'", uid)
+        if art is not None:
+            umgebung.sql("INSERT INTO wt_user_setting (user_id, setting_name, setting_value) VALUES (?, 'contactmethod', ?)", uid, art)
+        return uid
+
+    def test_nachrichten(self):
+        # Kontaktarten: admin und mitglied intern, bearbeiter nur E-Mail, verwalter kein Kontakt
+        self.kontakt("admin", "messaging")
+        mid = self.kontakt("mitglied", "messaging")
+        bid = self.kontakt("bearbeiter", "messaging3")
+        self.kontakt("verwalter", "none")
+        umgebung.sql("DELETE FROM wt_message WHERE user_id IN (?, ?)", mid, bid)
+        admin = U.sitzung("admin")
+        m = U.sitzung("mitglied")
+        basis = m.info()["baseUrl"].rstrip("/")
+
+        self.assertEqual("not-logged-in", U.sitzung().get("Messages", "testbaum").json["error"])
+        self.assertEqual("not-logged-in", U.sitzung().post("Messages", "testbaum", {"to": "admin", "body": "x"}).json["error"])
+
+        # Empfaengerliste wie im Block: ohne sich selbst, ohne "none", ohne Konten ohne Kontaktart
+        empfaenger = {r["user"]: r["contact"] for r in m.get("Messages", "testbaum").json["recipients"]}
+        self.assertEqual({"admin": "messaging", "bearbeiter": "messaging3"}, empfaenger)
+
+        self.assertEqual("missing-to", admin.post("Messages", "testbaum", {"body": "x"}).json["error"])
+        self.assertEqual("missing-body", admin.post("Messages", "testbaum", {"to": "mitglied"}).json["error"])
+        self.assertEqual("unknown-user", admin.post("Messages", "testbaum", {"to": "niemand", "body": "x"}).json["error"])
+        self.assertEqual("contact-none", admin.post("Messages", "testbaum", {"to": "verwalter", "body": "x"}).json["error"])
+        self.assertEqual("contact-none", admin.post("Messages", "testbaum", {"to": ["mitglied", "verwalter"], "body": "x"}).json["error"],
+                         "ein unerreichbarer Empfaenger in der Liste: nichts wird gesendet")
+        self.assertEqual(0, umgebung.sql("SELECT COUNT(*) FROM wt_message WHERE user_id = ?", mid)[0][0])
+
+        # Senden mit Link auf eine vertrauliche (I5) und eine sichtbare Person (I1), dazu ein fremder Server und die Form ohne schoene URLs
+        text = (f"Schau dir {basis}/tree/testbaum/individual/I1/Max-Muster an, und {basis}/tree/testbaum/individual/I5 -\n"
+                f"nicht aber https://example.org/tree/testbaum/individual/I1 oder {basis}/index.php?route=%2Ftree%2Ftestbaum%2Ffamily%2FF2&x=1")
+        url = f"{basis}/tree/testbaum/individual/I1/Max-Muster"
+        a = admin.post("Messages", "testbaum", {"to": "mitglied", "subject": "  Max   Muster I1 ", "body": text, "url": url}).json
+        self.assertEqual(["mitglied"], a["delivered"], a)
+
+        posteingang = m.get("Messages", "testbaum").json
+        self.assertEqual((1, None), (posteingang["page"], posteingang["nextPage"]))
+        n = posteingang["messages"][0]
+        self.assertEqual("Max Muster I1", n["subject"])
+        self.assertEqual(text, n["text"], "nur der Text zwischen den Strichlinien, die Mail-Floskeln bleiben in body")
+        self.assertEqual(url, n["url"])
+        self.assertIn("------------------------------------------------------------", n["body"])
+        self.assertEqual(("admin", "Admin", "admin@example.invalid"), (n["senderUser"], n["senderName"], n["sender"]))
+        self.assertRegex(n["created"], r"^\d{4}-\d{2}-\d{2}T")
+        links = {(l["type"], l["url"]): l["xref"] for l in n["links"]}
+        self.assertEqual("I1", links[("INDI", f"{basis}/tree/testbaum/individual/I1/Max-Muster")], "Link aus Text und url nur einmal")
+        self.assertIsNone(links[("INDI", f"{basis}/tree/testbaum/individual/I5")], "vertraulich: Art ja, Kennung nein")
+        self.assertEqual("F2", links[("FAM", f"{basis}/index.php?route=%2Ftree%2Ftestbaum%2Ffamily%2FF2&x=1")])
+        self.assertEqual(3, len(links), "fremder Server kommt nicht vor")
+        self.assertEqual(1, m.info()["user"]["messages"])
+        self.assertEqual(0, admin.info()["user"]["messages"])
+
+        # Antwort an admin landet in dessen Posteingang, nicht in Lesern des Baums
+        self.assertEqual(["admin"], m.post("Messages", "testbaum", {"to": "admin", "subject": "RE: Max Muster I1", "body": "Danke"}).json["delivered"])
+        self.assertEqual(["Danke"], [x["text"] for x in admin.get("Messages", "testbaum").json["messages"]])
+
+        # Nur E-Mail (messaging3): nichts in der Tabelle; ob der Testserver Mail verschicken kann, entscheidet er
+        a = admin.post("Messages", "testbaum", {"to": "bearbeiter", "body": "Mailtest"}).json
+        self.assertIn(a.get("error", "ok"), ("ok", "send-failed"), a)
+        self.assertEqual(0, umgebung.sql("SELECT COUNT(*) FROM wt_message WHERE user_id = ?", bid)[0][0])
+
+        # Loeschen: nur eigene
+        self.assertEqual("missing-ids", m.post("MessageDelete", "testbaum", {"ids": []}).json["error"])
+        self.assertEqual(0, U.sitzung("bearbeiter").post("MessageDelete", "testbaum", {"ids": [n["id"]]}).json["deleted"])
+        self.assertEqual(1, m.info()["user"]["messages"])
+        self.assertEqual(1, m.post("MessageDelete", "testbaum", {"ids": [n["id"], 999999]}).json["deleted"])
+        self.assertEqual([], m.get("Messages", "testbaum").json["messages"])
+        self.assertEqual(0, m.info()["user"]["messages"])
 
 
 if __name__ == "__main__":

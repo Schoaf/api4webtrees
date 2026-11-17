@@ -8,35 +8,41 @@
 
 <p align="center">
   <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-module%20ZIP-1F5F99?style=for-the-badge" alt="webtrees module api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Windows-wtWin%20.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows: wtWin (.exe)"></a>
   <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
   <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
 </p>
 
-A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/app4webtrees)**
-a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
+A [webtrees](https://webtrees.net/) module that gives the apps **[wtAnd, wtWin and wtTux](https://github.com/thobgg/app4webtrees)**
+(Android, Windows, Linux) a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 
-**Why:** whoever maintains the tree at the PC keeps working in webtrees as before. The rest of the family, who so far
-only had a website that is hard to use on a phone, get the tree on phone and tablet through the app: tree,
-relationships, anniversaries and photos. Changes made in the app, such as a photo of a gravestone or a corrected date,
-arrive as pending changes in the same webtrees installation.
+**Why:** whoever maintains the tree keeps working in webtrees as before – or in wtWin, a classic genealogy program on
+the same data. The rest of the family, who so far only had a website that is hard to use on a phone, get the tree on
+phone and tablet through wtAnd: tree, relationships, anniversaries and photos. Changes made in an app, such as a photo
+of a gravestone or a corrected date, arrive as pending changes in the same webtrees installation.
 
 | | |
 | - | - |
-| webtrees | 2.2.x (tested with 2.2.6); prepared for 2.3 |
+| webtrees | 2.2.x (tested with 2.2.6); also runs on the development state of 2.3 (main of 2026-11-04) – 2.3 may still change |
 | PHP | 8.3 or newer (as required by webtrees 2.2) |
 | Access | read and write, always with the rights of the signed-in webtrees user |
 | License | GPL-3.0 |
 
-## The app: wtAnd
+## The apps: wtAnd, wtWin and wtTux
 
-The module is the server side of **[wtAnd](https://github.com/thobgg/app4webtrees)**, a native Android app
-(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/app4webtrees/releases/latest)
-(signed). Outside the Play Store, Android asks once to allow your browser to install apps.
+The module is the server side of the apps in **[app4webtrees](https://github.com/thobgg/app4webtrees)**: **wtAnd**, a
+native Android app (Kotlin, no WebView) for phone and tablet, and **wtWin** and **wtTux**, the same program for
+Windows and Linux (wtMac as a test build). [Downloads](https://github.com/thobgg/app4webtrees/releases/latest): APK,
+Windows installer, Linux `.deb`, all signed. Outside the Play Store, Android asks once to allow your browser to install apps.
 
-| Tablet: tree and profile side by side | Phone: the profile as a timeline |
+| Phone: the tree | The profile as a timeline | Where the person lived |
+| - | - | - |
+| <img src="docs/app-handy-baum.png" alt="Tree on a phone" width="260"> | <img src="docs/app-handy.png" alt="Profile as a timeline" width="260"> | <img src="docs/app-handy-karte.png" alt="Map of the person's places" width="260"> |
+
+| PC: wtWin and wtTux | Tablet: tree and profile side by side |
 | - | - |
-| ![Tree and profile side by side](docs/app-tablet.png) | ![Profile on a phone](docs/app-handy.png) |
+| <img src="docs/app-pc.png" alt="wtWin: navigator with four generations" width="560"> | <img src="docs/app-tablet.png" alt="Tree and profile side by side" width="400"> |
 
 - **Tree:** hourglass view with ancestors, partners, children and grandchildren, siblings on request;
   pan and zoom freely, unfold branches upwards, make any person the centre.
@@ -45,6 +51,9 @@ The module is the server side of **[wtAnd](https://github.com/thobgg/app4webtree
 - **Editing:** add, change and delete events, add relatives with the “+” on any card, take or pick photos and attach
   them to a person, resized to fit the server's upload limit.
 - **Anniversaries** of the coming days, with a daily reminder if you like; moderators accept or reject pending changes in the app.
+- **On the PC:** wtWin and wtTux work like a classic genealogy program on the same tree – navigator and person sheet,
+  lists, charts and printing, books for the family (family book, local heritage book), tools such as a date
+  calculator, and the GEDCOM-L details German programs expect.
 - **Connect with one tap:** the “App” page in webtrees hands server, tree and a one-time code to the app.
 
 German and English; the labels of the server come in the language of the app. Whatever is not native yet opens as a
@@ -76,6 +85,11 @@ disappear from the “App” page, the note and the footer. Default: all on. See
 **Open links in the app:** the areas (individuals, families, media, charts) whose pages are offered to an app when
 opened from outside. Unticked areas always stay in the browser. Default: all on. See [Open links in the app](#open-links-in-the-app).
 
+**Note and footer link:** *Show the note and the footer link to* chooses who sees the note (see below) and the footer
+link to the “App” page: all signed-in users (default), a minimum role in the tree (editors, moderators, managers),
+administrators only, or nobody. Only the display changes – the “App” page stays reachable (the settings link it per
+tree) and who may use the apps is set by the rights in webtrees.
+
 ![Settings page: install the app, family trees for the app, apps, status](docs/einstellungen.png)
 
 ## For users: the “App” page
@@ -87,6 +101,8 @@ they click *Do not show again*); after that the links in the footer lead there. 
 visitor's device first (own apps before others); only that app is open, the rest is folded to one line each below, so the page stays short. On an iPhone or iPad it
 shows webtrees mobile by Andreas Scharf (App Store); a device without a matching app (none for it, or switched off in the settings) gets a note recommending the
 browser. Each app has two steps:
+
+![The “App” page at a Linux PC: wtTux open with download and connect, the other apps folded below](docs/app-seite.png)
 
 1. **Install:** a button to the newest download (`.exe`, `.deb` or APK), for the phone also as a QR code.
 2. **Connect your account – nothing to type, the password never reaches the device:**
@@ -198,12 +214,18 @@ The interface is complete since level 30 (1.18): every route needed for everyday
 rare from now on – changes and fixes are collected, pull requests are merged without an immediate release.
 
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-40 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+43 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page
 sizes), the answer reports what was actually delivered. Should something ever have to change incompatibly, it would
 be a new route, never a changed one.
+
+The interface is also independent of the GEDCOM version the server stores: dates, tags and links come in the same form
+whether the tree is GEDCOM 5.5.1 (webtrees 2.2/2.3) or GEDCOM 7.0. The proof is the 2.x line
+[api4webtrees-gedcom7-lab](https://github.com/thobgg/api4webtrees-gedcom7-lab) for
+[webtrees-gedcom7-lab](https://github.com/thobgg/webtrees-gedcom7-lab), an experiment in which webtrees stores GEDCOM 7.0
+natively: same routes, same fields, shared API levels, and wtAnd runs against both without a change.
 
 ### Apps on the “App” page
 
@@ -254,7 +276,7 @@ user may not see comes with `private: true` and no name; one whose name they may
 
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
-| `Info` | – | – | versions, `api` level, user (level n: with `language`, the language chosen under “My account”), visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
+| `Info` | – | – | versions, `api` level, user (level 41: with `language`, the language chosen under “My account”), visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
 | `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
 | `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, `stepFamilies` (the parents' families with other partners, i.e. half-siblings; `parent` names the shared parent), media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId`, `primary` (the photo webtrees shows for the person) and `crop` (the GEDCOM 7 crop of this link, `{top, left, height, width}` in pixels, or `null`). The person and everyone in these families carry `hasParents`, `partnersCount`, `childrenCount`. Level 19: `associatedIn` – where this person is a godparent, witness … (the other person's or family's event with `record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`, `url`, for families `husband` and `wife` as xrefs of the visible partners; only visible records and facts, sorted by date) |
 | `Family` | yes | `xref` | family with facts, children, media |
@@ -269,6 +291,7 @@ user may not see comes with `private: true` and no name; one whose name they may
 | `Portrait` | yes | `xref`, `crop?` | the main photo of the person as a square thumbnail of their crop (`2 CROP` at their link) – the image itself, not JSON; `thumb` points here when that link has a crop |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
+| `Messages` | yes | `page?` | level 42, members: the signed-in user's inbox from webtrees' own messaging (50 per page, newest first): `text` (the message alone), `url` (page it was sent from), `links` (records of this server in text or URL, resolved to `type`/`xref`, `null` when not visible), `senderName`/`senderUser` when the account still exists; plus `recipients`, the users one can write to (the list of the “Messages” block, without accounts without a contact method). `Info.user.messages` counts the inbox
 | `Places` | yes | `q` | editors only: up to 20 place names of the tree for suggestions while typing; `Wien, Ö` searches per level, like webtrees' own autocomplete |
 
 ### Writing (POST)
@@ -279,6 +302,8 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | Action | Parameters | Body |
 | - | - | - |
 | `Fact` | `xref` | `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom}` – with `factId` the fact is changed; sub-lines that are not mentioned (sources, media, coordinates) are kept |
+| `Messages` | – | `{to, subject?, body, url?}` – level 42: sends a message through webtrees' MessageService as the signed-in user (internal, e-mail or both, as the recipient chose; `url` goes into the e-mail as the page it was sent from); `to` one user name or a list, no broadcast. Answer `{ok, delivered}` |
+| `MessageDelete` | – | `{ids}` – deletes own messages. Answer `{ok, deleted}` |
 | `DeleteFact` | `xref` | `{factId}` |
 | `AddIndividual` | – | `{relation: child\|spouse\|father\|mother\|none, relativeTo?, family?, given, surname, sex, birthDate?, birthPlace?, dead?, deathDate?, deathPlace?, marriageDate?, marriagePlace?, facts?}` – `facts` is a list of further facts in the form of `Fact` (`[{tag:"OCCU", value:"Gardener"}, …]`), stored in the same step as the person; if one is invalid, nothing is created |
 | `Accept`, `Reject` | `xref?` | – moderators only: accept or reject the pending changes of one record, or of the whole tree when `xref` is omitted; answer `{ok, pending}` |
@@ -293,8 +318,8 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 
 Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`, `chart-disabled`, `link-not-found`, `link-exists`, `invalid-relation`, `too-many-results`,
 `private`, `not-editable`, `not-editor`, `fact-locked`, `family-locked`, `fact-not-found`,
-`invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes), `link-tag-not-allowed`, `parent-exists`, `family-required`,
-`family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
+`invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes; level 46: `nameParts` not an object of text or `null` with the known fields), `link-tag-not-allowed`, `parent-exists`, `family-required`,
+`family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`, `missing-to`, `unknown-user`, `contact-none`, `missing-body`, `send-failed`, `missing-ids`.
 
 Not included yet: creating sources and repositories, merging records.
 
