@@ -198,7 +198,7 @@ ROUTEN = [
      "`date` (level 44): keywords, months and calendar escapes are written in capitals (`abt 1865` → `ABT 1865`), text in brackets "
      "stays as entered (`INT 1900 (shortly after New Year)`), a date of only bracketed text is accepted; changing the date keeps "
      "its sub-lines (`3 TIME`), an empty date removes them with it. The same for dates in AddIndividual, AddSpouse and Citation. "
-     "`nameParts` (level n, only for `NAME`): `{prefix?, given?, nickname?, surnamePrefix?, surname?, suffix?, callName?}` written as stored "
+     "`nameParts` (level 46, only for `NAME`): `{prefix?, given?, nickname?, surnamePrefix?, surname?, suffix?, callName?}` written as stored "
      "(NPFX, GIVN, NICK, SPFX, SURN, NSFX, _RUFNAME); a part that is sent is set, `null` or empty removes it, a part not sent stays. With "
      "`nameParts` nothing is derived from `value`; without it GIVN, SURN and NSFX come from the value as before. Errors `invalid-name`, `invalid-value`."),
     ("post", "Association", True, 20, "editor",

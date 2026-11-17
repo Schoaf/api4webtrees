@@ -1547,7 +1547,7 @@ trait WriteActions
             }
         }
 
-        // Ab Stufe n: nameParts - Objekt mit den Feldern aus NAME_PARTS, je Text oder null
+        // Ab Stufe 46: nameParts - Objekt mit den Feldern aus NAME_PARTS, je Text oder null
         if (array_key_exists('nameParts', $body)) {
             if (!is_array($body['nameParts']) || array_is_list($body['nameParts']) && $body['nameParts'] !== []) {
                 return ['', 'invalid-name'];
@@ -1580,7 +1580,7 @@ trait WriteActions
      */
     private function buildFactGedcom(array $body, string $old): string
     {
-        // Ab Stufe n: mit nameParts schreibt der Client die Teile eines Namens selbst; dann leitet der Server nichts
+        // Ab Stufe 46: mit nameParts schreibt der Client die Teile eines Namens selbst; dann leitet der Server nichts
         // mehr aus dem Wert ab (GIVN, SURN, NSFX, Spitzname) - ein nicht gesendeter Teil bleibt, wie er ist.
         $has_parts = is_array($body['nameParts'] ?? null);
         if ($old === '') {
@@ -1644,7 +1644,7 @@ trait WriteActions
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
         }
 
-        // Namensteile (ab Stufe n): gesendet = setzen (leer oder null entfernt die Zeile samt Unterzeilen), nicht gesendet = bleibt
+        // Namensteile (ab Stufe 46): gesendet = setzen (leer oder null entfernt die Zeile samt Unterzeilen), nicht gesendet = bleibt
         if ($tag === 'NAME' && $has_parts) {
             foreach (array_reverse(self::NAME_PARTS, true) as $gedcom_tag => $field) {
                 if (!array_key_exists($field, $body['nameParts'])) {

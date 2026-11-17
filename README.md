@@ -296,7 +296,7 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 
 Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`, `chart-disabled`, `link-not-found`, `link-exists`, `invalid-relation`, `too-many-results`,
 `private`, `not-editable`, `not-editor`, `fact-locked`, `family-locked`, `fact-not-found`,
-`invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes; level n: `nameParts` not an object of text or `null` with the known fields), `link-tag-not-allowed`, `parent-exists`, `family-required`,
+`invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes; level 46: `nameParts` not an object of text or `null` with the known fields), `link-tag-not-allowed`, `parent-exists`, `family-required`,
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`, `missing-to`, `unknown-user`, `contact-none`, `missing-body`, `send-failed`, `missing-ids`.
 
 Not included yet: creating sources and repositories, merging records.

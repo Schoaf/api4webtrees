@@ -1,7 +1,7 @@
 # Changelog
 
-## Unreleased – level n
-**Write the parts of a name (issue #28).** `POST Fact` on a `NAME` fact also accepts `nameParts`
+## 1.29.0 – 2026-11-17
+**Level 46 – write the parts of a name (issue #28).** `POST Fact` on a `NAME` fact also accepts `nameParts`
 `{prefix, given, nickname, surnamePrefix, surname, suffix, callName}`, written as stored (`NPFX`, `GIVN`, `NICK`, `SPFX`,
 `SURN`, `NSFX`, `_RUFNAME`). A part that is sent is set, one sent as `null` or empty removes its line (with sub-lines), a
 part that is not sent stays as it is. With `nameParts` the server derives nothing from `value`, so a client can change the

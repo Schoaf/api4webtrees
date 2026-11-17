@@ -1632,7 +1632,7 @@ class Schreiben(unittest.TestCase):
         self.assertEqual([], [d for n in namen for d in n["details"] if d["tag"] in ("NPFX", "GIVN", "NICK", "SPFX", "SURN", "NSFX", "_RUFNAME")])
 
     def test_namensteile_schreiben(self):
-        """Stufe n: nameParts beim Aendern eines NAME-Fakts - gesendet wird gesetzt, leer entfernt, nicht gesendet bleibt (Issue #28)."""
+        """Stufe 46: nameParts beim Aendern eines NAME-Fakts - gesendet wird gesetzt, leer entfernt, nicht gesendet bleibt (Issue #28)."""
         s = U.sitzung("admin")
         neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Hans", "surname": "Muster", "sex": "M", "dead": True})
         self.assertEqual(True, neu.json["ok"], neu)
